@@ -3,6 +3,8 @@ import {brand,icon} from './icons.js';
 import {adminModules,renderAdminHome,renderAdminPlaceholder} from './modules/admin.js';
 import {renderInventario} from './modules/inventario.js';
 import {renderVentas} from './modules/ventas.js';
+import {renderCatalogo} from './modules/catalogo.js';
+import {renderPrecios} from './modules/precios.js';
 const app=document.querySelector('#app');
 
 function renderLogin(){
@@ -52,7 +54,9 @@ if(getUser()?.role!=='admin'){return;}
 const container=document.querySelector('#content');
 const module=adminModules.find(module=>module.id===id);
 if(id!=='inicio'&&!module){return;}
-if(id==='inicio'){renderAdminHome(container);}else{renderAdminPlaceholder(container,module);}
+// Módulos de Gipsander (catálogo, inventario y precios) reutilizados por el administrador.
+const gipsander={productos:renderCatalogo,inventario:renderInventario,precios:renderPrecios};
+if(id==='inicio'){renderAdminHome(container);}else if(gipsander[id]){gipsander[id](container,getUser());}else{renderAdminPlaceholder(container,module);}
 document.querySelector('#current-page').textContent=module?.title || 'Inicio';
 document.title=`SuperPOS · ${module?.title || 'Administración'}`;
 document.querySelectorAll('.nav-button').forEach(button=>{

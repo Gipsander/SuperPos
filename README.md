@@ -10,7 +10,7 @@ HTML, CSS y JavaScript puro, sin base de datos ni dependencias de producción.
 | gipsander | admin | Inventario |
 | luis | admin | Cajero |
 
-El usuario admite mayúsculas y espacios a los extremos. La contraseña es exactamente admin. Estas cuentas son ficticias y públicas: este login no es seguridad real. La sesión vive en memoria; recargar vuelve al acceso. No se usan cookies, localStorage ni sessionStorage.
+El usuario admite mayúsculas y espacios a los extremos. La contraseña es exactamente admin. Estas cuentas son ficticias y públicas: este login no es seguridad real. La sesión vive en memoria; recargar vuelve al acceso. No se usan cookies ni sessionStorage. Los datos de negocio (productos, precios, existencias y movimientos) sí se guardan en localStorage mediante `js/store.js`, así que persisten al recargar; para restablecerlos ejecuta `localStorage.clear()` en la consola.
 
 ## Ejecutar
 

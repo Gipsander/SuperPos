@@ -1,7 +1,7 @@
 // Cuentas ficticias y públicas. Este acceso solo simula roles, no protege datos.
 const users = [
 {username:'rafael',name:'Rafael',role:'admin',label:'Administrador'},
-{username:'gipsander',name:'Gipsander',role:'inventario',label:'Inventario'},
+{username:'gipsander',name:'Gipsander',role:'inventario',label:'Inventario',sedes:['s1','s2']},
 {username:'luis',name:'Luis',role:'cajero',label:'Cajero'}
 ];
 let currentUser = null;
