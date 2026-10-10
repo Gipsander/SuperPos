@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+/* Tokens de SuperPOS (heredados de css/base.css y css/inventario.css). */
+@theme {
+  --font-sans: Arial, Helvetica, sans-serif;
+  --color-brand: #217fbc;
+  --color-brand-dark: #176397;
+  --color-brand-soft: #eaf5ff;
+  --color-ink: #334e68;
+  --color-strong: #1f3a52;
+  --color-muted: #5d7790;
+  --color-line: #e3edf5;
+  --color-edge: #c5d6e3;
+  --color-soft: #f1f7fb;
+  --color-page: #f5f9fc;
+  --color-danger: #b42318;
+  --color-danger-bg: #fdeceb;
+  --color-warn: #8a5300;
+  --color-warn-bg: #fff3dc;
+  --color-ok: #0f6b4a;
+  --color-ok-bg: #e5f6ee;
+  --animate-flash: flash 1.8s ease-out;
+  --animate-pop: pop 0.2s ease-out;
+  --animate-fade: fade 0.16s ease-out;
+  @keyframes flash { from { background: #cfeedd; } to { background: transparent; } }
+  @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+  @keyframes fade { from { opacity: 0; } }
+}
+
+@layer base {
+  html { background: var(--color-page); color: var(--color-ink); }
+  body { margin: 0; font-family: var(--font-sans); line-height: 1.5; -webkit-tap-highlight-color: transparent; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  :focus-visible { outline: 3px solid #64b5ed; outline-offset: 2px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none !important; }
+}

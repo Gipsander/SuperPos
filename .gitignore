@@ -6,3 +6,7 @@ node_modules/
 test-results/
 .vs/
 .claude/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts

@@ -1,47 +1,55 @@
 # SuperPOS · Prototipo
 
-HTML, CSS y JavaScript puro, sin base de datos ni dependencias de producción.
+Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS 4. Sin base de datos: el estado compartido vive en `lib/store.ts` y se guarda en `localStorage`.
 
 ## Acceso de demostración
 
 | Usuario | Contraseña | Perfil |
 | --- | --- | --- |
-| rafael | admin | Administrador |
-| gipsander | admin | Inventario |
-| luis | admin | Cajero |
+| rafael | admin | Administrador (todas las sedes) |
+| gipsander | admin | Encargado de inventario (sedes Centro y Norte) |
+| luis | admin | Cajero (sede Centro) |
 
-El usuario admite mayúsculas y espacios a los extremos. La contraseña es exactamente admin. Estas cuentas son ficticias y públicas: este login no es seguridad real. La sesión vive en memoria; recargar vuelve al acceso. No se usan cookies ni sessionStorage. Los datos de negocio (productos, precios, existencias y movimientos) sí se guardan en localStorage mediante `js/store.js`, así que persisten al recargar; para restablecerlos ejecuta `localStorage.clear()` en la consola.
+El usuario admite mayúsculas y espacios a los extremos. La contraseña es exactamente `admin`. Estas cuentas son ficticias y públicas: este login no es seguridad real. La sesión vive en memoria (recargar vuelve al acceso). Los datos de negocio (productos, precios, existencias, movimientos y ventas) persisten en `localStorage`; para restablecerlos ejecuta `localStorage.clear()` en la consola.
 
 ## Ejecutar
 
-En VS Code abre index.html con Live Server, o ejecuta `python -m http.server 4173` y visita http://localhost:4173. Abre la página mediante HTTP, no con doble clic: JavaScript utiliza módulos.
+```bash
+npm install
+npm run dev        # http://localhost:3000
+npm run build      # exportación estática en out/
+npm run typecheck
+```
 
-## Reparto
+## Estructura
 
-| Responsable | Archivos principales |
+| Ruta | Contenido |
 | --- | --- |
-| Rafael | js/auth.js, js/app.js, js/modules/admin.js, css/login.css, css/admin.css |
-| Gipsander | js/modules/inventario.js, css/inventario.css |
-| Luis | js/modules/ventas.js, css/ventas.css |
+| `lib/types.ts` | Tipos: `Producto`, `Existencia`, `MovimientoInventario`, `Sede`, `Venta`… |
+| `lib/store.ts` | Store reactivo (`useStore`) + operaciones de negocio con persistencia |
+| `lib/auth.ts` | Usuarios ficticios, sesión en memoria (`useUser`) |
+| `components/app.tsx` | Navegación y layout por rol (sidebar del administrador, barra superior para los demás) |
+| `components/ui/` | Componentes base: botón, insignias de stock, modal accesible, avisos, formularios, tablas |
+| `components/inventory/` | Gipsander: catálogo (F04–F06), precios (F07), inventario (F11–F13) |
+| `components/pos/` | Luis: punto de venta (carrito, cobro, recibo) |
+| `components/admin/` | Luis: panel y reportes con gráficos SVG; inicio y módulos pendientes de Rafael |
 
-Gipsander debe conservar `renderInventario(container, user)` y Luis `renderVentas(container, user)`. Cada función recibe el elemento donde construir la vista y el usuario ficticio. Sus estilos deben usar .inventory-module y .sales-module.
+### API del store (`lib/store.ts`)
 
-El administrador tiene siete entradas: usuarios y roles, sedes, productos, inventario, precios, punto de venta y reportes. Por ahora abren espacios pendientes de desarrollo. Cuando estén listos, Rafael conectará los mismos módulos de sus compañeros al panel administrador.
+`crearProducto`, `actualizarProducto`, `setActivo`, `habilitarEnSede`, `setPrecioGlobal`, `registrarEntrada`, `setStockMinimo`, `descontarStock` y `registrarVenta` (valida todo el carrito, descuenta cada ítem con la misma lógica de `descontarStock` y guarda la venta; todo o nada). Los selectores (`getStock`, `sedesDeUsuario`, `getMovimientos`…) reciben el estado que devuelve `useStore()`.
 
-Coordinen cambios en index.html, css/base.css y js/icons.js. Usen una rama por tarea y revisen las pull requests antes de integrarlas a main.
+Regla de alerta: **agotado** si `cantidad = 0`; **stock bajo** si `cantidad < stockMínimo`.
+
+## Permisos por rol
+
+- **Encargado de inventario:** solo sus sedes; consulta stock y faltantes, registra entradas y configura mínimos; ve catálogo y precios en solo lectura.
+- **Administrador:** todas las sedes; además gestiona catálogo, sedes habilitadas y precio global, y accede a caja y reportes.
+- **Cajero:** solo el punto de venta de su sede.
+
+## Estado de los módulos
+
+Listos: catálogo, precios, inventario, punto de venta y panel/reportes. Pendientes (Rafael): usuarios y roles, sedes (se muestran como "Próximamente").
 
 ## Publicación
 
-GitHub → Settings → Pages → Deploy from a branch → main → /(root).
-La página se publica sin instalar ni compilar nada. Las rutas son relativas para funcionar bajo el subdirectorio del repositorio.
-
-Cada navegador tiene su propia sesión. GitHub comparte archivos, no operaciones.
-
-## Esta entrega
-
-- Login basado en la referencia, adaptable a móviles y con validación.
-- Menú del administrador y espacios pendientes, sin operaciones de negocio.
-- Pantallas independientes de inventario y vendedor.
-- Cierre de sesión y navegación con teclado.
-- Logo provisional propio en assets/logo.svg.
-- Registro y lógica de negocio quedan para futuras entregas.
+La exportación estática (`out/`) se puede publicar en GitHub Pages con una acción de GitHub. Para servirla bajo `/Superpos-prototipo` compile con `NEXT_PUBLIC_BASE_PATH=/Superpos-prototipo npm run build`. Cada navegador tiene su propia sesión y datos: GitHub comparte archivos, no operaciones.
