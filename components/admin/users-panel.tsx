@@ -1,8 +1,8 @@
 'use client';
 import { useState } from 'react';
-import { Pencil, Plus, Users } from 'lucide-react';
+import { Pencil, Plus, Trash2, Users } from 'lucide-react';
 import type { CuentaDemo, Rol, User } from '@/lib/types';
-import { guardarUsuario, useStore, type DatosUsuario } from '@/lib/store';
+import { eliminarUsuario, guardarUsuario, useStore, type DatosUsuario } from '@/lib/store';
 import { ROLES } from '@/lib/roles';
 import { Button } from '@/components/ui/button';
 import { ErrorBox, Field, Input, SearchBox, Select, Switch } from '@/components/ui/form';
@@ -18,6 +18,7 @@ export function UsersPanel({ user, initialSedeId = '' }: { user: User; initialSe
   const [sedeId, setSedeId] = useState(initialSedeId);
   const [editing, setEditing] = useState<CuentaDemo | 'new' | null>(null);
   const [toggle, setToggle] = useState<CuentaDemo | null>(null);
+  const [borrar, setBorrar] = useState<CuentaDemo | null>(null);
   const rows = state.usuarios.filter((u) => (!role || u.role === role) && (!sedeId || u.sedeId === sedeId) &&
     `${u.name} ${u.username}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
 
@@ -27,6 +28,14 @@ export function UsersPanel({ user, initialSedeId = '' }: { user: User; initialSe
     if (!result.ok) { toast(result.error, 'error'); return; }
     toast(toggle.activo ? 'Usuario desactivado' : 'Usuario activado');
     setToggle(null);
+  }
+
+  function remove() {
+    if (!borrar) return;
+    const result = eliminarUsuario(user, borrar.username);
+    if (!result.ok) { toast(result.error, 'error'); return; }
+    toast(`Usuario ${borrar.name} eliminado`);
+    setBorrar(null);
   }
 
   return <section className="mx-auto w-full max-w-[1180px]">
@@ -54,12 +63,14 @@ export function UsersPanel({ user, initialSedeId = '' }: { user: User; initialSe
           <td className={tdCls}><div className="flex gap-2">
             <Button small onClick={() => setEditing(u)} aria-label={`Editar a ${u.name}`}><Pencil aria-hidden="true" />Editar</Button>
             <Button small disabled={u.username === user.username} onClick={() => setToggle(u)} aria-label={`${u.activo ? 'Desactivar' : 'Activar'} a ${u.name}`}>{u.activo ? 'Desactivar' : 'Activar'}</Button>
+            <Button small variant="danger" disabled={u.username === user.username} onClick={() => setBorrar(u)} aria-label={`Eliminar a ${u.name}`} title={u.username === user.username ? 'No puedes eliminar tu propia cuenta' : 'Eliminar usuario'}><Trash2 aria-hidden="true" /></Button>
           </div></td>
         </tr>;
       })}</tbody>
     </TableWrap> : <EmptyState title="No hay usuarios con estos filtros" icon={Users}>Prueba otra búsqueda o crea un usuario para tu equipo.</EmptyState>}
     <p className="mt-3 text-xs text-muted">El rol determina las opciones disponibles al iniciar sesión. Los usuarios desactivados no pueden ingresar.</p>
     {editing && <UserForm user={user} account={editing === 'new' ? undefined : editing} defaultSedeId={sedeId} onClose={() => setEditing(null)} />}
+    {borrar && <ConfirmModal title="Eliminar usuario" message={`${borrar.name} (@${borrar.username}) se eliminará de forma permanente y ya no podrá iniciar sesión. Sus ventas y movimientos se conservarán.`} confirmText="Eliminar usuario" danger onCancel={() => setBorrar(null)} onConfirm={remove} />}
     {toggle && <ConfirmModal title={`${toggle.activo ? 'Desactivar' : 'Activar'} usuario`} message={toggle.activo ? `${toggle.name} dejará de poder iniciar sesión. Sus ventas y movimientos se conservarán.` : `${toggle.name} podrá iniciar sesión con su rol y sede asignados.`} confirmText={toggle.activo ? 'Desactivar usuario' : 'Activar usuario'} danger={toggle.activo} onCancel={() => setToggle(null)} onConfirm={changeStatus} />}
   </section>;
 }

@@ -4,7 +4,7 @@ import { Pencil, Plus, SearchX } from 'lucide-react';
 import type { Producto, User } from '@/lib/types';
 import {
   CATEGORIAS, UNIDADES, actualizarProducto, crearProducto, getExistencia, getProducto, getSede, habilitarEnSede,
-  sedesDeUsuario, sedesHabilitadas, setActivo, useStore,
+  sedesDeUsuario, sedesHabilitadas, setActivo, siguienteCodigo, useStore,
 } from '@/lib/store';
 import { cx, money, norm } from '@/lib/format';
 import { Button } from '@/components/ui/button';
@@ -160,9 +160,10 @@ function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () =
   const toast = useToast();
   const editando: Producto | undefined = codigo ? getProducto(state, codigo) : undefined;
   const [f, setF] = useState({
-    codigo: editando?.codigo ?? '', nombre: editando?.nombre ?? '', categoria: editando?.categoria ?? '',
+    nombre: editando?.nombre ?? '', categoria: editando?.categoria ?? CATEGORIAS[0],
     unidadMedida: editando?.unidadMedida ?? 'unidad', precio: '', activo: editando?.activo ?? true,
   });
+  const codigoMostrado = editando ? editando.codigo : f.categoria ? siguienteCodigo(state.productos, f.categoria) : 'Selecciona categoría...';
   const [sedesNuevo, setSedesNuevo] = useState<string[]>([]);
   const [error, setError] = useState('');
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => { setF((s) => ({ ...s, [k]: v })); setError(''); };
@@ -174,7 +175,7 @@ function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () =
       if (!r.ok) { setError(r.error); return; }
       toast(`Cambios guardados en ${f.nombre.trim()}`);
     } else {
-      const r = crearProducto({ codigo: f.codigo, nombre: f.nombre, categoria: f.categoria, unidadMedida: f.unidadMedida, precioGlobal: f.precio, activo: f.activo });
+      const r = crearProducto({ nombre: f.nombre, categoria: f.categoria, unidadMedida: f.unidadMedida, precioGlobal: f.precio, activo: f.activo });
       if (!r.ok) { setError(r.error); return; }
       sedesNuevo.forEach((id) => habilitarEnSede(id, r.codigo, true));
       toast(`Producto ${r.codigo} registrado`);
@@ -186,7 +187,6 @@ function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () =
     <Modal title={editando ? 'Editar producto' : 'Nuevo producto'} onClose={onClose}>
       <form onSubmit={submit} noValidate className="flex flex-col gap-3.5">
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-          <Field label="Código">{(id) => <Input id={id} value={f.codigo} readOnly={!!editando} maxLength={16} placeholder="Ej. P-025" autoComplete="off" onChange={(e) => set('codigo', e.target.value)} />}</Field>
           <Field label="Nombre">{(id) => <Input id={id} value={f.nombre} maxLength={60} autoComplete="off" onChange={(e) => set('nombre', e.target.value)} />}</Field>
           <Field label="Categoría">
             {(id) => (
@@ -196,6 +196,7 @@ function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () =
               </Select>
             )}
           </Field>
+          <Field label="Código">{(id) => <Input id={id} title="Se genera automáticamente según la categoría" value={codigoMostrado} readOnly tabIndex={-1} className="cursor-not-allowed bg-soft text-muted" />}</Field>
           <Field label="Unidad de medida">
             {(id) => <Select id={id} value={f.unidadMedida} onChange={(e) => set('unidadMedida', e.target.value)}>{UNIDADES.map((u) => <option key={u}>{u}</option>)}</Select>}
           </Field>

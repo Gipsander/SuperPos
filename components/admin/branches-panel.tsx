@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { ArrowLeft, ArrowUpRight, Boxes, MapPin, Pencil, Plus, Store, Users } from 'lucide-react';
+import { ArrowUpRight, Boxes, MapPin, Pencil, Plus, Store, Users } from 'lucide-react';
 import type { Sede, User } from '@/lib/types';
 import { getStock, guardarSede, useStore, type DatosSede } from '@/lib/store';
 import { ROLES } from '@/lib/roles';
@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { StatusBadge } from './users-panel';
 import type { AdminPage } from './modules';
+import { useSubBack } from './sub-back';
 
 export function BranchesPanel({ user, onNavigate }: { user: User; onNavigate: (page: AdminPage, sedeId: string) => void }) {
   const state = useStore();
@@ -20,11 +21,11 @@ export function BranchesPanel({ user, onNavigate }: { user: User; onNavigate: (p
   const [editing, setEditing] = useState<Sede | 'new' | null>(null);
   const sede = state.sedes.find((s) => s.id === selected);
   const rows = state.sedes.filter((s) => (!status || s.activa === (status === 'activa')) && `${s.codigo} ${s.nombre} ${s.estado} ${s.ciudad}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  useSubBack(sede ? { label: 'Sedes', onBack: () => setSelected('') } : null);
   const team = sede ? state.usuarios.filter((u) => u.sedeId === sede.id) : [];
   const stock = sede ? getStock(state, sede.id) : [];
   return <section className="mx-auto w-full max-w-[1180px]">
     {sede ? <>
-      <Button small className="mb-4" onClick={() => setSelected('')}><ArrowLeft aria-hidden="true" />Volver a sedes</Button>
       <PageHeading eyebrow={`Sedes · ${sede.codigo}`} title={sede.nombre} description={`${sede.ciudad}, ${sede.estado} · ${sede.direccion}`} actions={<Button onClick={() => setEditing(sede)}><Pencil aria-hidden="true" />Editar sede</Button>} />
       <div className="mb-5 flex flex-wrap items-center gap-3"><StatusBadge active={sede.activa} feminine />{!sede.activa && <p className="m-0 text-muted">Operación suspendida. Se conservan el equipo, las existencias y el historial.</p>}</div>
       <div className="mb-5 grid gap-3 sm:grid-cols-3">

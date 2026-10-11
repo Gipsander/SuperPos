@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  BarChart3, Box, Boxes, LayoutGrid, LogOut, Store, Tag, Users, type LucideIcon,
+  ArrowLeft, BarChart3, Box, Boxes, LayoutGrid, LogOut, Store, Tag, Users, type LucideIcon,
 } from 'lucide-react';
 import { logout, useUser } from '@/lib/auth';
 import type { User } from '@/lib/types';
@@ -12,6 +12,7 @@ import { LoginScreen } from '@/components/login-screen';
 import { AdminHome } from '@/components/admin/admin-home';
 import { ADMIN_MODULES, type AdminPage } from '@/components/admin/modules';
 import { ModulePlaceholder } from '@/components/admin/module-placeholder';
+import { SubBackContext, type SubBack } from '@/components/admin/sub-back';
 import { Dashboard } from '@/components/admin/dashboard';
 import { UsersPanel } from '@/components/admin/users-panel';
 import { BranchesPanel } from '@/components/admin/branches-panel';
@@ -44,6 +45,9 @@ function Profile({ user }: { user: User }) {
 function AdminShell({ user }: { user: User }) {
   const [page, setPage] = useState<AdminPage>('inicio');
   const [selectedSede, setSelectedSede] = useState('');
+  // Cada sección del sidebar es independiente: no hay historial entre ellas. El botón «Volver» solo existe
+  // dentro de una sub-vista de la sección actual (la registra el panel con useSubBack) y regresa a su vista principal.
+  const [subVista, setSubVista] = useState<SubBack | null>(null);
   const go = useCallback((p: AdminPage, sedeId = '') => {
     setSelectedSede(sedeId);
     setPage(p);
@@ -52,8 +56,7 @@ function AdminShell({ user }: { user: User }) {
     document.getElementById('content')?.focus({ preventScroll: true });
   }, []);
   useEffect(() => {
-    const h = window.location.hash.slice(1);
-    if (PAGES.has(h)) setPage(h as AdminPage);
+    // Cada sesión de administrador arranca siempre en Inicio: un #hash residual no cambia la vista inicial.
     const onHash = () => { const x = window.location.hash.slice(1); if (PAGES.has(x)) setPage(x as AdminPage); };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -91,6 +94,15 @@ function AdminShell({ user }: { user: User }) {
           <Profile user={user} />
         </header>
         <main id="content" tabIndex={-1} className="px-5 py-6 outline-none md:px-8 md:py-8">
+          <SubBackContext.Provider value={setSubVista}>
+          {subVista && (
+            <div className="mx-auto mb-4 w-full max-w-[1180px]">
+              <button type="button" onClick={subVista.onBack} aria-label={`Volver a ${subVista.label}`}
+                className="inline-flex min-h-10 max-w-full items-center gap-2 rounded-[10px] border border-line bg-white px-3 text-[13px] font-semibold text-muted transition-colors hover:border-edge hover:bg-brand-soft hover:text-strong [&_svg]:size-4 [&_svg]:shrink-0">
+                <ArrowLeft aria-hidden="true" /><span className="truncate">Volver a {subVista.label}</span>
+              </button>
+            </div>
+          )}
           {page === 'inicio' && <AdminHome name={user.name} onNavigate={go} />}
           {page === 'usuarios' && <UsersPanel key={selectedSede} user={user} initialSedeId={selectedSede} />}
           {page === 'sedes' && <BranchesPanel user={user} onNavigate={go} />}
@@ -98,7 +110,8 @@ function AdminShell({ user }: { user: User }) {
           {page === 'inventario' && <InventoryPanel key={selectedSede} user={user} initialSedeId={selectedSede} />}
           {page === 'precios' && <PricesPanel user={user} />}
           {page === 'reportes' && <Dashboard />}
-          {current && !current.ready && <ModulePlaceholder module={current} onBack={() => go('inicio')} />}
+          {current && !current.ready && <ModulePlaceholder module={current} />}
+          </SubBackContext.Provider>
         </main>
       </div>
     </div>

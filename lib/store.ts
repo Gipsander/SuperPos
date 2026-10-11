@@ -19,33 +19,48 @@ export const SEDES: Sede[] = [
   { id: 's4', codigo: 'ESTE', nombre: 'Sede Este', estado: 'Lara', ciudad: 'Barquisimeto', direccion: 'Av. Lara, sector Este', activa: true },
 ];
 export const CATEGORIAS = ['Lácteos', 'Panadería', 'Bebidas', 'Despensa', 'Frutas y verduras', 'Carnes', 'Limpieza', 'Cuidado personal'];
+/** Prefijo del código de producto según la categoría; las categorías sin entrada usan «O» (Otros). */
+export const PREFIJOS_CATEGORIA: Record<string, string> = {
+  'Lácteos': 'L', 'Panadería': 'P', 'Bebidas': 'B', 'Despensa': 'A', 'Frutas y verduras': 'F',
+  'Carnes': 'R', 'Limpieza': 'M', 'Cuidado personal': 'C',
+};
+export const prefijoCategoria = (categoria: string) => PREFIJOS_CATEGORIA[categoria] ?? 'O';
+
+/** Siguiente código correlativo de la categoría: busca el número más alto con ese prefijo (L-001 → L-002). */
+export function siguienteCodigo(productos: Pick<Producto, 'codigo'>[], categoria: string): string {
+  const prefijo = prefijoCategoria(categoria);
+  const re = new RegExp(`^${prefijo}-(\\d+)$`);
+  const max = productos.reduce((m, p) => Math.max(m, Number(re.exec(p.codigo)?.[1] ?? 0)), 0);
+  return `${prefijo}-${String(max + 1).padStart(3, '0')}`;
+}
+
 export const UNIDADES = ['unidad', 'kg', 'litro', 'paquete', 'caja', 'botella'];
 
 const SEED_PRODUCTOS: [string, string, string, string, number][] = [
-  ['P-001', 'Leche entera 1 L', 'Lácteos', 'litro', 1.35],
-  ['P-002', 'Queso blanco', 'Lácteos', 'kg', 6.8],
-  ['P-003', 'Yogur natural 1 kg', 'Lácteos', 'unidad', 2.9],
-  ['P-004', 'Mantequilla 250 g', 'Lácteos', 'unidad', 2.2],
-  ['P-005', 'Pan campesino', 'Panadería', 'unidad', 1.1],
-  ['P-006', 'Pan de sandwich', 'Panadería', 'paquete', 2.4],
-  ['P-007', 'Agua mineral 5 L', 'Bebidas', 'botella', 1.9],
-  ['P-008', 'Refresco cola 2 L', 'Bebidas', 'botella', 2.1],
-  ['P-009', 'Jugo de naranja 1 L', 'Bebidas', 'litro', 2.6],
-  ['P-010', 'Arroz blanco 1 kg', 'Despensa', 'paquete', 1.45],
-  ['P-011', 'Harina de maíz 1 kg', 'Despensa', 'paquete', 1.6],
-  ['P-012', 'Pasta larga 500 g', 'Despensa', 'paquete', 1.25],
-  ['P-013', 'Aceite vegetal 1 L', 'Despensa', 'botella', 3.3],
-  ['P-014', 'Azúcar 1 kg', 'Despensa', 'paquete', 1.55],
-  ['P-015', 'Café molido 250 g', 'Despensa', 'paquete', 3.9],
-  ['P-016', 'Tomate', 'Frutas y verduras', 'kg', 2.3],
-  ['P-017', 'Cebolla', 'Frutas y verduras', 'kg', 1.7],
-  ['P-018', 'Plátano', 'Frutas y verduras', 'kg', 1.4],
-  ['P-019', 'Pechuga de pollo', 'Carnes', 'kg', 5.2],
-  ['P-020', 'Carne molida', 'Carnes', 'kg', 7.4],
-  ['P-021', 'Detergente líquido 2 L', 'Limpieza', 'botella', 6.5],
-  ['P-022', 'Papel higiénico x4', 'Limpieza', 'paquete', 3.1],
-  ['P-023', 'Jabón de baño', 'Cuidado personal', 'unidad', 1.05],
-  ['P-024', 'Shampoo 400 ml', 'Cuidado personal', 'botella', 4.6],
+  ['L-001', 'Leche entera 1 L', 'Lácteos', 'litro', 1.35],
+  ['L-002', 'Queso blanco', 'Lácteos', 'kg', 6.8],
+  ['L-003', 'Yogur natural 1 kg', 'Lácteos', 'unidad', 2.9],
+  ['L-004', 'Mantequilla 250 g', 'Lácteos', 'unidad', 2.2],
+  ['P-001', 'Pan campesino', 'Panadería', 'unidad', 1.1],
+  ['P-002', 'Pan de sandwich', 'Panadería', 'paquete', 2.4],
+  ['B-001', 'Agua mineral 5 L', 'Bebidas', 'botella', 1.9],
+  ['B-002', 'Refresco cola 2 L', 'Bebidas', 'botella', 2.1],
+  ['B-003', 'Jugo de naranja 1 L', 'Bebidas', 'litro', 2.6],
+  ['A-001', 'Arroz blanco 1 kg', 'Despensa', 'paquete', 1.45],
+  ['A-002', 'Harina de maíz 1 kg', 'Despensa', 'paquete', 1.6],
+  ['A-003', 'Pasta larga 500 g', 'Despensa', 'paquete', 1.25],
+  ['A-004', 'Aceite vegetal 1 L', 'Despensa', 'botella', 3.3],
+  ['A-005', 'Azúcar 1 kg', 'Despensa', 'paquete', 1.55],
+  ['A-006', 'Café molido 250 g', 'Despensa', 'paquete', 3.9],
+  ['F-001', 'Tomate', 'Frutas y verduras', 'kg', 2.3],
+  ['F-002', 'Cebolla', 'Frutas y verduras', 'kg', 1.7],
+  ['F-003', 'Plátano', 'Frutas y verduras', 'kg', 1.4],
+  ['R-001', 'Pechuga de pollo', 'Carnes', 'kg', 5.2],
+  ['R-002', 'Carne molida', 'Carnes', 'kg', 7.4],
+  ['M-001', 'Detergente líquido 2 L', 'Limpieza', 'botella', 6.5],
+  ['M-002', 'Papel higiénico x4', 'Limpieza', 'paquete', 3.1],
+  ['C-001', 'Jabón de baño', 'Cuidado personal', 'unidad', 1.05],
+  ['C-002', 'Shampoo 400 ml', 'Cuidado personal', 'botella', 4.6],
 ];
 
 function seed(): StoreState {
@@ -105,6 +120,27 @@ function seed(): StoreState {
   return { usuarios: structuredClone(USUARIOS_DEMO), sedes: structuredClone(SEDES), productos, existencias, movimientos, historialPrecios: [], ventas, seq: 2000 };
 }
 
+/** Datos guardados con la nomenclatura anterior (P-001…P-024 para todo): recodifica por categoría en todas las referencias. */
+function migrarCodigosLegacy(d: StoreState) {
+  const legacy = d.productos.find((p) => p.codigo === 'P-001');
+  if (legacy?.nombre !== 'Leche entera 1 L') return;
+  const esViejo = (c: string) => /^P-\d+$/.test(c);
+  const viejos = d.productos.filter((p) => esViejo(p.codigo)).sort((a, b) => a.codigo.localeCompare(b.codigo));
+  const mapa = new Map<string, string>();
+  const ocupados: Pick<Producto, 'codigo'>[] = d.productos.filter((p) => !esViejo(p.codigo));
+  for (const p of viejos) {
+    const nuevo = siguienteCodigo(ocupados, p.categoria);
+    ocupados.push({ codigo: nuevo });
+    mapa.set(p.codigo, nuevo);
+  }
+  const m = (c: string) => mapa.get(c) ?? c;
+  d.productos.forEach((p) => { p.codigo = m(p.codigo); });
+  d.existencias.forEach((e) => { e.productoCodigo = m(e.productoCodigo); });
+  d.movimientos?.forEach((x) => { x.productoCodigo = m(x.productoCodigo); });
+  d.historialPrecios?.forEach((h) => { h.codigo = m(h.codigo); });
+  d.ventas.forEach((v) => v.items.forEach((i) => { i.codigo = m(i.codigo); }));
+}
+
 function load(): StoreState {
   try {
     const raw = globalThis.localStorage?.getItem(KEY);
@@ -119,6 +155,7 @@ function load(): StoreState {
             direccion: s.direccion ?? base?.direccion ?? '', activa: s.activa ?? true };
         });
         data.usuarios ??= structuredClone(USUARIOS_DEMO);
+        migrarCodigosLegacy(data);
         return data;
       }
     }
@@ -206,6 +243,20 @@ export function guardarUsuario(actor: User, input: DatosUsuario, usernameActual?
 }
 
 export type DatosSede = Omit<Sede, 'id'>;
+/** Elimina la cuenta; las ventas ya registradas conservan el nombre del cajero. */
+export function eliminarUsuario(actor: User, username: string): Result {
+  return mutate((d) => {
+    if (!esAdministrador(d, actor)) return fail('Solo el administrador puede gestionar usuarios.');
+    const i = d.usuarios.findIndex((u) => u.username === username);
+    if (i < 0) return fail('El usuario no existe.');
+    const objetivo = d.usuarios[i];
+    if (objetivo.username === actor.username) return fail('No puedes eliminar tu propia cuenta.');
+    if (objetivo.role === 'admin' && objetivo.activo && !d.usuarios.some((u) => u !== objetivo && u.activo && u.role === 'admin')) return fail('Debe quedar al menos un administrador activo.');
+    d.usuarios.splice(i, 1);
+    return { ok: true };
+  });
+}
+
 export function guardarSede(actor: User, input: DatosSede, sedeId?: string): Result<{ id: string }> {
   return mutate((d) => {
     if (!esAdministrador(d, actor)) return fail('Solo el administrador puede gestionar sedes.');
@@ -256,13 +307,15 @@ export const getHistorialPrecios = (s: StoreState, limit = 20) =>
 
 /* ---------- Catálogo (F04, F05, F06) ---------- */
 export interface NuevoProducto {
-  codigo: string; nombre: string; categoria: string; unidadMedida: string; precioGlobal: number | string; activo?: boolean;
+  /** Opcional: si se omite, se genera automáticamente según la categoría (L-001, B-002…). */
+  codigo?: string; nombre: string; categoria: string; unidadMedida: string; precioGlobal: number | string; activo?: boolean;
 }
 export function crearProducto(input: NuevoProducto): Result<{ codigo: string }> {
-  const codigo = input.codigo.trim().toUpperCase();
+  const manual = input.codigo?.trim().toUpperCase();
   const nombre = input.nombre.trim();
   const precio = Number(input.precioGlobal);
   return mutate((d) => {
+    const codigo = manual || siguienteCodigo(d.productos, input.categoria);
     if (!/^[A-Z0-9-]{2,16}$/.test(codigo)) return fail('El código debe tener de 2 a 16 caracteres (letras, números o guiones).');
     if (d.productos.some((p) => p.codigo === codigo)) return fail(`Ya existe un producto con el código ${codigo}.`);
     if (nombre.length < 2) return fail('Escribe el nombre del producto.');
