@@ -14,7 +14,7 @@ export function AdminHome({ name, onNavigate }: { name: string; onNavigate: (p: 
       <PageHeading eyebrow="Panel de administración" title={`Hola, ${name}`} description="Todo lo que necesitas para administrar tu supermercado, en un solo lugar." />
       <div className="mb-7 flex items-center justify-between gap-4 rounded-[20px] bg-gradient-to-br from-brand to-brand-dark p-7 text-white">
         <div>
-          <h2 className="mb-1.5 text-[22px] font-bold tracking-tight">Bienvenido a Superpos</h2>
+          <h2 className="mb-1.5 text-[22px] font-bold tracking-tight">Bienvenido a SuperPOS</h2>
           <p className="m-0 max-w-[52ch] opacity-90">Catálogo, precios, inventario, caja y reportes comparten los mismos datos: lo que cambias en un módulo se refleja al instante en los demás.</p>
         </div>
         <Store className="hidden size-16 shrink-0 opacity-60 sm:block" aria-hidden="true" />
