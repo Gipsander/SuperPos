@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  BarChart3, Box, Boxes, LayoutGrid, LogOut, ShoppingCart, Store, Tag, Users, type LucideIcon,
+  BarChart3, Box, Boxes, LayoutGrid, LogOut, Store, Tag, Users, type LucideIcon,
 } from 'lucide-react';
 import { logout, useUser } from '@/lib/auth';
 import type { User } from '@/lib/types';
@@ -19,7 +19,7 @@ import { InventoryPanel } from '@/components/inventory/inventory-panel';
 import { PricesPanel } from '@/components/inventory/prices-panel';
 import { PosTerminal } from '@/components/pos/pos-terminal';
 
-const ICONS: Record<string, LucideIcon> = { inicio: LayoutGrid, users: Users, store: Store, box: Box, inventory: Boxes, price: Tag, cart: ShoppingCart, chart: BarChart3 };
+const ICONS: Record<string, LucideIcon> = { inicio: LayoutGrid, users: Users, store: Store, box: Box, inventory: Boxes, price: Tag, chart: BarChart3 };
 const PAGES = new Set<string>(['inicio', ...ADMIN_MODULES.map((m) => m.id)]);
 
 const Brand = () => (
@@ -94,7 +94,6 @@ function AdminShell({ user }: { user: User }) {
           {page === 'productos' && <CatalogPanel key={selectedSede} user={user} initialSedeId={selectedSede} />}
           {page === 'inventario' && <InventoryPanel key={selectedSede} user={user} initialSedeId={selectedSede} />}
           {page === 'precios' && <PricesPanel user={user} />}
-          {page === 'ventas' && <PosTerminal user={user} />}
           {page === 'reportes' && <Dashboard />}
           {current && !current.ready && <ModulePlaceholder module={current} onBack={() => go('inicio')} />}
         </main>

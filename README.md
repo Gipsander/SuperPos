@@ -81,8 +81,8 @@ Regla de alerta: **agotado** si `cantidad = 0`; **stock bajo** si `cantidad < st
 ## Permisos por rol
 
 - **Encargado de inventario:** solo su sede asignada; consulta stock y faltantes, registra entradas y configura mínimos; ve catálogo y precios en solo lectura.
-- **Administrador:** todas las sedes; además gestiona catálogo, sedes habilitadas y precio global, y accede a caja y reportes.
-- **Cajero:** solo el punto de venta de su sede, mostrada como dato fijo sin desplegable. El catálogo coloca los productos agotados al final y mantiene el orden alfabético dentro de cada grupo.
+- **Administrador:** todas las sedes; además gestiona catálogo, sedes habilitadas y precio global, y accede a reportes (incluye el ranking de cajeros por ingresos generados). **No** incluye la vista de caja: el punto de venta es exclusivo del cajero.
+- **Cajero:** solo el punto de venta de su sede, mostrada como dato fijo sin desplegable. El catálogo no muestra los productos agotados y se ordena alfabéticamente.
 
 ## Estado de los módulos
 

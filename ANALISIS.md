@@ -111,8 +111,8 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 | Consultar catálogo y precio | ✅ | ✅ solo lectura | — |
 | Crear / editar productos y habilitar por sede (F04–F06) | ✅ | ❌ | — |
 | Modificar precio global (F07) | ✅ | ❌ | — |
-| Vender en caja | ✅ cualquier sede | — | ✅ su sede |
-| Ver panel y reportes | ✅ | — | — |
+| Vender en caja | ❌ | — | ✅ su sede |
+| Ver panel y reportes (incluye ranking de cajeros por ingresos) | ✅ | — | — |
 
 **Sedes por usuario (demostración):** `rafael` = todas · `gipsander` = Centro · `luis` = Centro.
 
@@ -184,7 +184,7 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 | A6 | Ingreso con cantidad no entera, ≤ 0 o > 100 000 | **Rechazo** |
 | A7 | Ingreso sobre producto inactivo o no habilitado en la sede | **Rechazo** |
 | A8 | Mínimo no entero o negativo | **Rechazo** y el valor vuelve al anterior |
-| A9 | Producto agotado en caja | Se muestra al final del catálogo y no se puede agregar (botón **Sin stock**) |
+| A9 | Producto agotado en caja | No se muestra en el catálogo de caja |
 | A10 | Cantidad en carrito mayor al stock | Botón **+** deshabilitado y aviso; el cobro se bloquea |
 | A11 | Efectivo recibido menor al total | **Rechazo** con mensaje |
 | A12 | Carrito vacío | **Cobrar** deshabilitado |

@@ -1,4 +1,4 @@
-export type AdminPage = 'inicio' | 'usuarios' | 'sedes' | 'productos' | 'inventario' | 'precios' | 'ventas' | 'reportes';
+export type AdminPage = 'inicio' | 'usuarios' | 'sedes' | 'productos' | 'inventario' | 'precios' | 'reportes';
 
 export interface AdminModule {
   id: Exclude<AdminPage, 'inicio'>;
@@ -16,6 +16,5 @@ export const ADMIN_MODULES: AdminModule[] = [
   { id: 'productos', title: 'Productos', icon: 'box', description: 'Explora el catálogo y define qué productos maneja cada sede.', owner: 'Gipsander', ready: true },
   { id: 'inventario', title: 'Inventario', icon: 'inventory', description: 'Consulta existencias, ingresos de mercancía y alertas de stock.', owner: 'Gipsander', ready: true },
   { id: 'precios', title: 'Precios', icon: 'price', description: 'Actualiza el precio global de los productos para todas las sedes.', owner: 'Gipsander', ready: true },
-  { id: 'ventas', title: 'Punto de venta', icon: 'cart', description: 'Accede a caja para preparar y registrar las compras.', owner: 'Luis', ready: true },
-  { id: 'reportes', title: 'Reportes', icon: 'chart', description: 'Revisa las ventas, los faltantes y los movimientos por sede.', owner: 'Luis', ready: true },
+  { id: 'reportes', title: 'Reportes', icon: 'chart', description: 'Revisa las ventas, el rendimiento de cajeros, los faltantes y los movimientos por sede.', owner: 'Luis', ready: true },
 ];

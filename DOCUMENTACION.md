@@ -71,7 +71,7 @@ No hace falta ejecutar ningún otro comando de npm para probarla. El detalle de 
 
 | Usuario | Contraseña | Perfil | Qué puede hacer |
 | --- | --- | --- | --- |
-| `rafael` | `admin` | Administrador | Gestionar usuarios y sedes; todas las sedes: catálogo, precios, inventario, caja y reportes |
+| `rafael` | `admin` | Administrador | Gestionar usuarios y sedes; todas las sedes: catálogo, precios, inventario y reportes (con ranking de cajeros por ingresos); no accede a caja |
 | `gipsander` | `admin` | Encargado de inventario | Sede Centro: stock, ingresos y mínimos; catálogo y precios solo lectura |
 | `luis` | `admin` | Cajero | Punto de venta de la sede Centro |
 

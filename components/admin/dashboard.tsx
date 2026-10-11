@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { ArrowDownToLine, ArrowUpFromLine, CircleDollarSign, PackageX, Receipt, ShoppingBag, TriangleAlert } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpFromLine, CircleDollarSign, PackageX, Receipt, ShoppingBag, Trophy, TriangleAlert } from 'lucide-react';
 import { getMovimientos, getProducto, getSede, getStock, useStore } from '@/lib/store';
 import { cx, fechaCorta, fechaHora, money, num } from '@/lib/format';
 import { Tag, StockBadge } from '@/components/ui/badge';
@@ -48,6 +48,16 @@ export function Dashboard() {
     value: Math.round(state.ventas.filter((v) => v.sedeId === s.id).reduce((t, v) => t + v.total, 0) * 100) / 100,
   })), [state.ventas, state.sedes]);
 
+  const cajeros = useMemo(() => {
+    const m = new Map<string, { nombre: string; ventas: number; total: number }>();
+    ventas.forEach((v) => {
+      const c = m.get(v.cajero) ?? { nombre: v.cajero, ventas: 0, total: 0 };
+      c.ventas += 1; c.total += v.total;
+      m.set(v.cajero, c);
+    });
+    return [...m.values()].sort((a, b) => b.total - a.total);
+  }, [ventas]);
+
   const ingresos = ventas.reduce((t, v) => t + v.total, 0);
   const agotados = faltantes.filter((f) => f.estado === 'agotado').length;
   const ultimas = [...ventas].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 8);
@@ -85,6 +95,47 @@ export function Dashboard() {
           <BarChart horizontal data={porSede} format={money} ariaLabel="Ingresos acumulados por sede" />
         </Box>
       </div>
+
+      <Box title="Rendimiento de Cajeros (Por Ingresos Generados)" icon={Trophy} className="mb-[18px]">
+        {cajeros.length === 0 ? (
+          <EmptyState title="Aún no hay ventas" icon={Trophy}>Cuando los cajeros registren ventas aparecerá el ranking.</EmptyState>
+        ) : (
+          <>
+            <div className="mb-4 flex items-center gap-4 rounded-xl border border-brand bg-brand-soft px-4 py-3.5">
+              <Trophy className="size-9 shrink-0 text-brand" aria-hidden="true" />
+              <div className="min-w-0">
+                <span className="text-[11px] font-bold tracking-[1.6px] text-brand-dark uppercase">Cajero líder · Top #1</span>
+                <p className="m-0 truncate text-[22px] font-bold tracking-tight text-strong">{cajeros[0].nombre}</p>
+                <span className="text-[13px] text-muted">{money(cajeros[0].total)} recaudados · {num(cajeros[0].ventas)} {cajeros[0].ventas === 1 ? 'venta' : 'ventas'}</span>
+              </div>
+            </div>
+            <TableWrap caption="Ranking de cajeros por ingresos generados" minWidth={460} className="border-0">
+              <thead><tr><th scope="col" className={thCls}>#</th><th scope="col" className={thCls}>Cajero</th><th scope="col" className={cx(thCls, numCls)}>Ventas</th><th scope="col" className={cx(thCls, numCls)}>Total recaudado</th><th scope="col" className={thCls}>% del total</th></tr></thead>
+              <tbody>
+                {cajeros.map((c, i) => {
+                  const pct = ingresos ? (c.total / ingresos) * 100 : 0;
+                  return (
+                    <tr key={c.nombre} className="group">
+                      <td className={cx(tdCls, 'text-[13px] font-bold', i === 0 && 'text-brand')}>{i + 1}</td>
+                      <th scope="row" className={cx(tdCls, 'text-left text-[13px] font-normal')}><strong className="text-strong">{c.nombre}</strong></th>
+                      <td className={cx(tdCls, numCls, 'text-[13px]')}>{num(c.ventas)}</td>
+                      <td className={cx(tdCls, numCls, 'text-[13px] font-bold text-strong')}>{money(c.total)}</td>
+                      <td className={tdCls}>
+                        <div className="flex items-center gap-2">
+                          <div role="progressbar" aria-label={`${c.nombre}: ${pct.toFixed(1)}% de los ingresos`} aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} className="h-2 min-w-[80px] flex-1 overflow-hidden rounded-full bg-soft">
+                            <div className="h-full rounded-full bg-brand" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="w-12 text-right text-xs text-muted tabular-nums">{pct.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </TableWrap>
+          </>
+        )}
+      </Box>
 
       <div className="mb-[18px] grid grid-cols-1 gap-[18px] lg:grid-cols-2">
         <Box title="Últimas ventas" icon={Receipt}>

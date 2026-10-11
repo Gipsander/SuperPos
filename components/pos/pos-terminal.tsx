@@ -58,21 +58,26 @@ export function PosTerminal({ user }: { user: User }) {
   }
 
   return (
-    <section className="mx-auto w-full max-w-[1280px]">
-      <PageHeading
-        eyebrow={user.role === 'admin' ? 'Administración' : undefined}
-        title="Punto de venta"
-        description="Elige productos de la sede, arma el carrito y cobra. El inventario se descuenta al confirmar."
-        actions={user.role === 'admin'
-          ? <SedeSelect sedes={sedes} value={sedeId} onChange={cambiarSede} />
-          : <div className="flex min-w-[210px] flex-col gap-1">
-              <span className="text-xs font-bold tracking-wide text-muted uppercase">Sede asignada</span>
-              <span className="py-2 font-semibold text-strong">{sedes.find((s) => s.id === sedeId)?.nombre}</span>
-            </div>}
-      />
-      <div className="grid grid-cols-1 items-start gap-[18px] lg:grid-cols-[minmax(0,1fr)_380px]">
-        <ProductCatalog rows={rows} enCarrito={enCarrito} onAdd={add} />
-        <CartPanel lineas={lineas} onChange={change} onRemove={(c) => change(c, 0)} onClear={() => setCart([])} onPay={() => setCobrando(true)} />
+    <section className="mx-auto flex w-full max-w-[1280px] flex-col lg:h-[calc(100dvh-70px)] lg:overflow-hidden">
+      <div className="shrink-0">
+        <PageHeading
+          title="Punto de venta"
+          description="Elige productos de la sede, arma el carrito y cobra. El inventario se descuenta al confirmar."
+          actions={user.role === 'admin'
+            ? <SedeSelect sedes={sedes} value={sedeId} onChange={cambiarSede} />
+            : <div className="flex min-w-[210px] flex-col gap-1">
+                <span className="text-xs font-bold tracking-wide text-muted uppercase">Sede asignada</span>
+                <span className="py-2 font-semibold text-strong">{sedes.find((s) => s.id === sedeId)?.nombre}</span>
+              </div>}
+        />
+      </div>
+      <div className="grid grid-cols-1 items-start gap-[18px] lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-stretch lg:overflow-hidden">
+        <div className="flex flex-col lg:min-h-0 lg:overflow-hidden">
+          <ProductCatalog rows={rows} enCarrito={enCarrito} onAdd={add} />
+        </div>
+        <div className="lg:min-h-0 lg:overflow-y-auto">
+          <CartPanel lineas={lineas} onChange={change} onRemove={(c) => change(c, 0)} onClear={() => setCart([])} onPay={() => setCobrando(true)} />
+        </div>
       </div>
       {cobrando && <PaymentModal total={total} onClose={() => setCobrando(false)} onConfirm={confirmar} />}
       {venta && <ReceiptModal venta={venta} onClose={() => setVenta(null)} />}

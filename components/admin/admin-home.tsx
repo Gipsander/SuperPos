@@ -1,12 +1,12 @@
 'use client';
 import {
-  ArrowUpRight, BarChart3, Box, Boxes, Hammer, ShoppingCart, Store, Tag, Users, type LucideIcon,
+  ArrowUpRight, BarChart3, Box, Boxes, Hammer, Store, Tag, Users, type LucideIcon,
 } from 'lucide-react';
 import type { AdminPage } from '@/components/admin/modules';
 import { ADMIN_MODULES } from '@/components/admin/modules';
 import { PageHeading } from '@/components/ui/layout';
 
-const ICONS: Record<string, LucideIcon> = { users: Users, store: Store, box: Box, inventory: Boxes, price: Tag, cart: ShoppingCart, chart: BarChart3 };
+const ICONS: Record<string, LucideIcon> = { users: Users, store: Store, box: Box, inventory: Boxes, price: Tag, chart: BarChart3 };
 
 export function AdminHome({ name, onNavigate }: { name: string; onNavigate: (p: AdminPage) => void }) {
   return (
@@ -15,7 +15,7 @@ export function AdminHome({ name, onNavigate }: { name: string; onNavigate: (p: 
       <div className="mb-7 flex items-center justify-between gap-4 rounded-[20px] bg-gradient-to-br from-brand to-brand-dark p-7 text-white">
         <div>
           <h2 className="mb-1.5 text-[22px] font-bold tracking-tight">Bienvenido a SuperPOS</h2>
-          <p className="m-0 max-w-[52ch] opacity-90">Catálogo, precios, inventario, caja y reportes comparten los mismos datos: lo que cambias en un módulo se refleja al instante en los demás.</p>
+          <p className="m-0 max-w-[52ch] opacity-90">Catálogo, precios, inventario, ventas y reportes comparten los mismos datos: lo que cambias en un módulo se refleja al instante en los demás.</p>
         </div>
         <Store className="hidden size-16 shrink-0 opacity-60 sm:block" aria-hidden="true" />
       </div>
