@@ -1,6 +1,5 @@
 # 📘 SuperPOS · Documentación de la Transformación y Guía de Uso Local
 
-**Preparado para:** Gipsander Urdaneta  
 **Proyecto:** Sistema de Punto de Venta e Inventario (SuperPOS)  
 **Tecnologías:** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, LocalStorage (Sin base de datos externa).
 
@@ -27,7 +26,7 @@ Reunimos en una sola aplicación el alcance de cada integrante:
 
 ---
 
-## 📁 Parte 2: ¿Cómo quedó organizado el código?
+## Parte 2: ¿Cómo quedó organizado el código?
 
 ```text
 Superpos-prototipo/
@@ -52,7 +51,7 @@ Superpos-prototipo/
 
 ---
 
-## 🧪 Parte 3: Guía de uso local (para probarlo de forma sencilla y segura)
+## Parte 3: Guía de uso local (para probarlo de forma sencilla y segura)
 
 ### Encender y apagar
 1. Abre una terminal en la carpeta del proyecto.

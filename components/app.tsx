@@ -6,6 +6,7 @@ import {
 import { logout, useUser } from '@/lib/auth';
 import type { User } from '@/lib/types';
 import { asset, cx } from '@/lib/format';
+import { CajeroAvatar } from '@/components/ui/icons';
 import { ToastProvider } from '@/components/ui/toast';
 import { LoginScreen } from '@/components/login-screen';
 import { AdminHome } from '@/components/admin/admin-home';
@@ -30,7 +31,9 @@ const Brand = () => (
 function Profile({ user }: { user: User }) {
   return (
     <div className="flex items-center gap-3">
-      <span aria-hidden="true" className="grid size-10 place-items-center rounded-xl bg-brand-soft font-bold text-brand">{user.name.slice(0, 1)}</span>
+      {user.role === 'cajero'
+        ? <CajeroAvatar />
+        : <span aria-hidden="true" className="grid size-10 place-items-center rounded-xl bg-brand-soft font-bold text-brand">{user.name.slice(0, 1)}</span>}
       <div className="hidden leading-tight sm:block"><p className="m-0 text-[13px] font-bold text-strong">{user.name}</p><p className="m-0 text-[11px] text-muted">{user.label}</p></div>
       <button type="button" onClick={logout} aria-label="Cerrar sesión" title="Cerrar sesión"
         className="inline-flex min-h-11 items-center gap-1.5 rounded-[10px] border-l border-line pl-3 text-muted hover:text-strong [&_svg]:size-5"><LogOut aria-hidden="true" /><span className="text-[13px]">Salir</span></button>

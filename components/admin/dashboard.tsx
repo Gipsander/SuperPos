@@ -7,7 +7,23 @@ import { Tag, StockBadge } from '@/components/ui/badge';
 import { Select } from '@/components/ui/form';
 import { Box, EmptyState, PageHeading, StatCard, Sub, TableWrap, numCls, tdCls, thCls } from '@/components/ui/layout';
 import { metodoLabel } from '@/components/pos/payment-method-selector';
+import { CajeroAvatar, TrofeoIcon } from '@/components/ui/icons';
+import type { Venta } from '@/lib/types';
 import { BarChart, LineChart, type Dato } from './charts';
+
+interface FilaCajero { nombre: string; ventas: number; total: number; sedeId: string; ultima: string }
+
+/** Agrupa las ventas por cajero (nombre guardado en cada Venta) y ordena de mayor a menor dinero recaudado. */
+function rankingCajeros(ventas: Venta[]): FilaCajero[] {
+  const m = new Map<string, FilaCajero>();
+  ventas.forEach((v) => {
+    const c = m.get(v.cajero) ?? { nombre: v.cajero, ventas: 0, total: 0, sedeId: v.sedeId, ultima: '' };
+    c.ventas += 1; c.total += v.total;
+    if (v.fecha > c.ultima) { c.ultima = v.fecha; c.sedeId = v.sedeId; }
+    m.set(v.cajero, c);
+  });
+  return [...m.values()].sort((a, b) => b.total - a.total);
+}
 
 const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 
@@ -48,15 +64,13 @@ export function Dashboard() {
     value: Math.round(state.ventas.filter((v) => v.sedeId === s.id).reduce((t, v) => t + v.total, 0) * 100) / 100,
   })), [state.ventas, state.sedes]);
 
-  const cajeros = useMemo(() => {
-    const m = new Map<string, { nombre: string; ventas: number; total: number }>();
-    ventas.forEach((v) => {
-      const c = m.get(v.cajero) ?? { nombre: v.cajero, ventas: 0, total: 0 };
-      c.ventas += 1; c.total += v.total;
-      m.set(v.cajero, c);
-    });
-    return [...m.values()].sort((a, b) => b.total - a.total);
+  const cajeros = useMemo(() => rankingCajeros(ventas), [ventas]);
+  const semana = useMemo(() => {
+    const desde = Date.now() - 7 * 86400e3;
+    const lista = rankingCajeros(ventas.filter((v) => new Date(v.fecha).getTime() >= desde));
+    return { lista, total: lista.reduce((t, c) => t + c.total, 0) };
   }, [ventas]);
+  const ganador = semana.lista[0];
 
   const ingresos = ventas.reduce((t, v) => t + v.total, 0);
   const agotados = faltantes.filter((f) => f.estado === 'agotado').length;
@@ -101,23 +115,33 @@ export function Dashboard() {
           <EmptyState title="Aún no hay ventas" icon={Trophy}>Cuando los cajeros registren ventas aparecerá el ranking.</EmptyState>
         ) : (
           <>
-            <div className="mb-4 flex items-center gap-4 rounded-xl border border-brand bg-brand-soft px-4 py-3.5">
-              <Trophy className="size-9 shrink-0 text-brand" aria-hidden="true" />
-              <div className="min-w-0">
-                <span className="text-[11px] font-bold tracking-[1.6px] text-brand-dark uppercase">Cajero líder · Top #1</span>
-                <p className="m-0 truncate text-[22px] font-bold tracking-tight text-strong">{cajeros[0].nombre}</p>
-                <span className="text-[13px] text-muted">{money(cajeros[0].total)} recaudados · {num(cajeros[0].ventas)} {cajeros[0].ventas === 1 ? 'venta' : 'ventas'}</span>
+            {ganador ? (
+              <div className="mb-4 flex flex-wrap items-center gap-4 rounded-xl border border-brand bg-brand-soft px-4 py-3.5">
+                <TrofeoIcon className="size-10 shrink-0 text-brand" />
+                <CajeroAvatar className="size-12 bg-white" />
+                <div className="min-w-0 flex-1">
+                  <span className="text-[11px] font-bold tracking-[1.6px] text-brand-dark uppercase">🏆 Empleado de la Semana · últimos 7 días</span>
+                  <p className="m-0 truncate text-[22px] font-bold tracking-tight text-strong">{ganador.nombre}</p>
+                  <span className="text-[13px] text-muted">{getSede(state, ganador.sedeId)?.nombre ?? 'Sede'} · {num(ganador.ventas)} {ganador.ventas === 1 ? 'ticket' : 'tickets'}</span>
+                </div>
+                <div className="text-right">
+                  <strong className="block text-[26px] leading-tight tracking-tight text-strong tabular-nums">{money(ganador.total)}</strong>
+                  <span className="text-xs text-muted">{(semana.total ? (ganador.total / semana.total) * 100 : 0).toFixed(1)}% del total vendido por todos los cajeros</span>
+                </div>
               </div>
-            </div>
-            <TableWrap caption="Ranking de cajeros por ingresos generados" minWidth={460} className="border-0">
-              <thead><tr><th scope="col" className={thCls}>#</th><th scope="col" className={thCls}>Cajero</th><th scope="col" className={cx(thCls, numCls)}>Ventas</th><th scope="col" className={cx(thCls, numCls)}>Total recaudado</th><th scope="col" className={thCls}>% del total</th></tr></thead>
+            ) : (
+              <p className="mb-4 rounded-xl border border-line bg-soft px-4 py-3 text-muted">Sin ventas en los últimos 7 días: todavía no hay Empleado de la Semana.</p>
+            )}
+            <TableWrap caption="Ranking de cajeros por ingresos generados" minWidth={560} className="border-0">
+              <thead><tr><th scope="col" className={thCls}>#</th><th scope="col" className={thCls}>Cajero</th><th scope="col" className={thCls}>Sede</th><th scope="col" className={cx(thCls, numCls)}>Ventas</th><th scope="col" className={cx(thCls, numCls)}>Total recaudado</th><th scope="col" className={thCls}>% del total</th></tr></thead>
               <tbody>
                 {cajeros.map((c, i) => {
                   const pct = ingresos ? (c.total / ingresos) * 100 : 0;
                   return (
                     <tr key={c.nombre} className="group">
                       <td className={cx(tdCls, 'text-[13px] font-bold', i === 0 && 'text-brand')}>{i + 1}</td>
-                      <th scope="row" className={cx(tdCls, 'text-left text-[13px] font-normal')}><strong className="text-strong">{c.nombre}</strong></th>
+                      <th scope="row" className={cx(tdCls, 'text-left text-[13px] font-normal')}><span className="flex items-center gap-2"><CajeroAvatar className="size-8" /><strong className="text-strong">{c.nombre}</strong></span></th>
+                      <td className={cx(tdCls, 'text-[13px]')}>{getSede(state, c.sedeId)?.nombre}</td>
                       <td className={cx(tdCls, numCls, 'text-[13px]')}>{num(c.ventas)}</td>
                       <td className={cx(tdCls, numCls, 'text-[13px] font-bold text-strong')}>{money(c.total)}</td>
                       <td className={tdCls}>

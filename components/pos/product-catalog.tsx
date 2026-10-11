@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { StockBadge } from '@/components/ui/badge';
 import { CategorySelect, SearchBox, Toolbar } from '@/components/ui/form';
 import { EmptyState } from '@/components/ui/layout';
+import { ProductIcon } from '@/components/ui/icons';
 
 /** Catálogo de venta: tarjetas con precio global y estado de stock de la sede. */
 export function ProductCatalog({ rows, enCarrito, onAdd }: {
@@ -40,9 +41,12 @@ export function ProductCatalog({ rows, enCarrito, onAdd }: {
             const label = r.estado === 'bajo' ? `Stock bajo · ${num(r.cantidad)} ${r.producto.unidadMedida}` : `${num(r.cantidad)} ${r.producto.unidadMedida}`;
             return (
               <li key={r.productoCodigo} className={cx('flex flex-col gap-2 rounded-xl border bg-white p-3.5', n > 0 ? 'border-brand ring-1 ring-brand' : 'border-line')}>
-                <div className="min-h-[44px]">
-                  <strong className="block leading-snug text-strong">{r.producto.nombre}</strong>
-                  <span className="text-xs text-muted">{r.productoCodigo} · {r.producto.categoria}</span>
+                <div className="flex min-h-[44px] items-start gap-2.5">
+                  <ProductIcon nombre={r.producto.nombre} categoria={r.producto.categoria} className="size-11" />
+                  <div className="min-w-0">
+                    <strong className="block leading-snug text-strong">{r.producto.nombre}</strong>
+                    <span className="text-xs text-muted">{r.productoCodigo} · {r.producto.categoria}</span>
+                  </div>
                 </div>
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-[22px] font-bold tracking-tight text-strong tabular-nums">{money(r.producto.precioGlobal)}</span>

@@ -3,6 +3,7 @@ import { Minus, Plus, Trash2 } from 'lucide-react';
 import type { FilaStock } from '@/lib/types';
 import { money, num } from '@/lib/format';
 import { IconButton } from '@/components/ui/button';
+import { ProductIcon } from '@/components/ui/icons';
 
 export interface LineaCarrito { fila: FilaStock; cantidad: number }
 
@@ -13,9 +14,12 @@ export function CartLine({ linea, onChange, onRemove }: { linea: LineaCarrito; o
   return (
     <li className="flex flex-col gap-1.5 border-b border-line py-3 first:pt-0 last:border-0">
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <strong className="leading-snug text-strong">{nombre}</strong>
-          <span className="block text-xs text-muted">{money(fila.producto.precioGlobal)} / {fila.producto.unidadMedida}</span>
+        <div className="flex min-w-0 items-start gap-2.5">
+          <ProductIcon nombre={nombre} categoria={fila.producto.categoria} className="size-9" />
+          <div className="min-w-0">
+            <strong className="leading-snug text-strong">{nombre}</strong>
+            <span className="block text-xs text-muted">{money(fila.producto.precioGlobal)} / {fila.producto.unidadMedida}</span>
+          </div>
         </div>
         <strong className="text-strong tabular-nums">{money(fila.producto.precioGlobal * cantidad)}</strong>
       </div>
