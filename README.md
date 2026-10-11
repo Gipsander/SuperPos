@@ -88,4 +88,4 @@ Listos: catálogo, precios, inventario, punto de venta y panel/reportes. Pendien
 
 ## Publicación
 
-La exportación estática (`out/`) se puede publicar en GitHub Pages con una acción de GitHub. Para servirla bajo `/Superpos-prototipo` compile con `NEXT_PUBLIC_BASE_PATH=/Superpos-prototipo npm run build`. Cada navegador tiene su propia sesión y datos: GitHub comparte archivos, no operaciones.
+La exportación estática (`out/`) se puede publicar en GitHub Pages con una acción de GitHub. Para servirla bajo `/SuperPos` compile con `NEXT_PUBLIC_BASE_PATH=/SuperPos npm run build`. Cada navegador tiene su propia sesión y datos: GitHub comparte archivos, no operaciones.
