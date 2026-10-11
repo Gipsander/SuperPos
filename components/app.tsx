@@ -12,6 +12,8 @@ import { AdminHome } from '@/components/admin/admin-home';
 import { ADMIN_MODULES, type AdminPage } from '@/components/admin/modules';
 import { ModulePlaceholder } from '@/components/admin/module-placeholder';
 import { Dashboard } from '@/components/admin/dashboard';
+import { UsersPanel } from '@/components/admin/users-panel';
+import { BranchesPanel } from '@/components/admin/branches-panel';
 import { CatalogPanel } from '@/components/inventory/catalog-panel';
 import { InventoryPanel } from '@/components/inventory/inventory-panel';
 import { PricesPanel } from '@/components/inventory/prices-panel';
@@ -38,7 +40,9 @@ function Profile({ user }: { user: User }) {
 
 function AdminShell({ user }: { user: User }) {
   const [page, setPage] = useState<AdminPage>('inicio');
-  const go = useCallback((p: AdminPage) => {
+  const [selectedSede, setSelectedSede] = useState('');
+  const go = useCallback((p: AdminPage, sedeId = '') => {
+    setSelectedSede(sedeId);
     setPage(p);
     window.history.replaceState(null, '', `#${p}`);
     window.scrollTo({ top: 0 });
@@ -85,8 +89,10 @@ function AdminShell({ user }: { user: User }) {
         </header>
         <main id="content" tabIndex={-1} className="px-5 py-6 outline-none md:px-8 md:py-8">
           {page === 'inicio' && <AdminHome name={user.name} onNavigate={go} />}
-          {page === 'productos' && <CatalogPanel user={user} />}
-          {page === 'inventario' && <InventoryPanel user={user} />}
+          {page === 'usuarios' && <UsersPanel key={selectedSede} user={user} initialSedeId={selectedSede} />}
+          {page === 'sedes' && <BranchesPanel user={user} onNavigate={go} />}
+          {page === 'productos' && <CatalogPanel key={selectedSede} user={user} initialSedeId={selectedSede} />}
+          {page === 'inventario' && <InventoryPanel key={selectedSede} user={user} initialSedeId={selectedSede} />}
           {page === 'precios' && <PricesPanel user={user} />}
           {page === 'ventas' && <PosTerminal user={user} />}
           {page === 'reportes' && <Dashboard />}

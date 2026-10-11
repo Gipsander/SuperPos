@@ -23,7 +23,7 @@ Transformamos el prototipo original (que consistía en archivos de Vanilla HTML,
 Reunimos en una sola aplicación el alcance de cada integrante:
 * **Módulos de Gipsander (Inventario):** Catálogo de productos (F04-F06) con matriz de habilitación por sedes, control y registro histórico de Precios (F07), y Gestión de Inventario (F11-F13) con ingreso rápido y alertas inteligentes de stock faltante o agotado en tiempo real.
 * **Módulos de Luis (Ventas y Administración):** Punto de venta (POS) interactivo con carrito inteligente que previene sobreventas, cobros en efectivo/tarjeta/transferencia y generación de recibo imprimible; junto a un Panel Gerencial (Dashboard) con métricas clave y tres gráficos visuales (SVG) que reaccionan de inmediato a las ventas. *Nota: el repositorio no contenía código previo de estos módulos (solo un espacio reservado), por lo que fueron desarrollados durante esta migración, conectados al mismo almacén de datos. Luis puede revisarlos y ajustarlos.*
-* **Layout y Seguridad (Rafael):** Se migró el inicio de sesión y la navegación del prototipo original de Rafael: Navbar y Sidebar interactivos que adaptan la interfaz de usuario automáticamente según el rol del usuario que inicia sesión. Los módulos de **Usuarios y roles** y **Sedes** siguen **pendientes** y se muestran como "Próximamente".
+* **Layout y Seguridad (Rafael):** Se migró el inicio de sesión y la navegación del prototipo original de Rafael: Navbar y Sidebar interactivos que adaptan la interfaz de usuario automáticamente según el rol del usuario que inicia sesión. Los módulos de **Usuarios y roles** y **Sedes** ya permiten crear, editar y activar/desactivar registros. Cada usuario tiene un rol y una sede única; el administrador supervisa todas. Las cuentas y sedes nuevas se conectan con el acceso, catálogo, inventario y caja mediante el mismo store.
 
 ---
 
@@ -39,10 +39,10 @@ Superpos-prototipo/
 │   ├── ui/               # Componentes base: botón, insignias de stock, modal accesible, avisos, formularios, tablas
 │   ├── inventory/        # Catálogo, Precios e Inventario (Gipsander)
 │   ├── pos/              # Punto de Venta / Caja (Luis)
-│   └── admin/            # Panel de Control y reportes con gráficos (Luis)
+│   └── admin/            # Usuarios, sedes, panel de control y reportes
 ├── lib/                  # El cerebro del sistema (Lógica y Datos)
-│   ├── store.ts          # Gestión del inventario y ventas (LocalStorage)
-│   ├── auth.ts           # Cuentas de demostración de Rafael, Gipsander y Luis
+│   ├── store.ts          # Usuarios, sedes, inventario y ventas (LocalStorage)
+│   ├── auth.ts           # Acceso con cuentas del store y sesión en memoria
 │   └── types.ts          # Reglas y formatos de datos (TypeScript)
 ├── public/               # Imágenes y recursos estáticos (logo.svg)
 ├── README.md             # Instrucciones de uso e instalación
@@ -71,8 +71,8 @@ No hace falta ejecutar ningún otro comando de npm para probarla. El detalle de 
 
 | Usuario | Contraseña | Perfil | Qué puede hacer |
 | --- | --- | --- | --- |
-| `rafael` | `admin` | Administrador | Todas las sedes: catálogo, precios, inventario, caja y reportes |
-| `gipsander` | `admin` | Encargado de inventario | Sedes Centro y Norte: stock, ingresos y mínimos; catálogo y precios solo lectura |
+| `rafael` | `admin` | Administrador | Gestionar usuarios y sedes; todas las sedes: catálogo, precios, inventario, caja y reportes |
+| `gipsander` | `admin` | Encargado de inventario | Sede Centro: stock, ingresos y mínimos; catálogo y precios solo lectura |
 | `luis` | `admin` | Cajero | Punto de venta de la sede Centro |
 
 ### Recorrido de prueba (unos 5 minutos)
@@ -82,3 +82,11 @@ No hace falta ejecutar ningún otro comando de npm para probarla. El detalle de 
 
 ### Regla de alertas de stock
 Un producto está **Agotado** si su cantidad es 0, y tiene **Stock bajo** si su cantidad es menor que el stock mínimo de la sede. La tabla indica cuántas unidades faltan para llegar al mínimo.
+
+### Usuarios, sedes y mejoras de caja
+
+Desde **Sedes**, crea una tienda y abre su detalle para gestionar usuarios, habilitar productos e ingresar mercancía. En **Usuarios y roles**, crea una cuenta con contraseña ficticia, rol y una única sede; cierra sesión y prueba el acceso con ella. Consulta el recorrido completo en el README.
+
+El cajero ve su sede como texto fijo, sin desplegable. Los productos agotados aparecen al final del catálogo; cada grupo conserva el orden alfabético. Desactivar usuarios bloquea su acceso; desactivar una sede suspende sus operaciones conservando el historial.
+
+`npm test` ejecuta seis pruebas de administración, permisos, persistencia e integración con inventario y ventas.

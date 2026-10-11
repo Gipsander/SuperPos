@@ -63,7 +63,12 @@ export function PosTerminal({ user }: { user: User }) {
         eyebrow={user.role === 'admin' ? 'Administración' : undefined}
         title="Punto de venta"
         description="Elige productos de la sede, arma el carrito y cobra. El inventario se descuenta al confirmar."
-        actions={<SedeSelect sedes={sedes} value={sedeId} onChange={cambiarSede} />}
+        actions={user.role === 'admin'
+          ? <SedeSelect sedes={sedes} value={sedeId} onChange={cambiarSede} />
+          : <div className="flex min-w-[210px] flex-col gap-1">
+              <span className="text-xs font-bold tracking-wide text-muted uppercase">Sede asignada</span>
+              <span className="py-2 font-semibold text-strong">{sedes.find((s) => s.id === sedeId)?.nombre}</span>
+            </div>}
       />
       <div className="grid grid-cols-1 items-start gap-[18px] lg:grid-cols-[minmax(0,1fr)_380px]">
         <ProductCatalog rows={rows} enCarrito={enCarrito} onAdd={add} />

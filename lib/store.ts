@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from 'react';
 import type {
   Existencia, EstadoStock, FilaStock, MetodoPago, MovimientoInventario, Producto, Result, Sede,
-  StoreState, User, Venta, VentaItem,
+  StoreState, User, Venta, VentaItem, Rol, CuentaDemo,
 } from './types';
+import { ROLES, USUARIOS_DEMO } from './roles';
 
 // Estado compartido de SuperPOS (catálogo, existencias por sede, movimientos y ventas).
 // Es un store reactivo (useSyncExternalStore) que persiste en localStorage de forma transparente.
@@ -12,10 +13,10 @@ import type {
 const KEY = 'superpos.store.v2';
 
 export const SEDES: Sede[] = [
-  { id: 's1', nombre: 'Sede Centro' },
-  { id: 's2', nombre: 'Sede Norte' },
-  { id: 's3', nombre: 'Sede Sur' },
-  { id: 's4', nombre: 'Sede Este' },
+  { id: 's1', codigo: 'CENTRO', nombre: 'Sede Centro', estado: 'Lara', ciudad: 'Barquisimeto', direccion: 'Av. 20, sector Centro', activa: true },
+  { id: 's2', codigo: 'NORTE', nombre: 'Sede Norte', estado: 'Lara', ciudad: 'Barquisimeto', direccion: 'Av. Intercomunal, sector Norte', activa: true },
+  { id: 's3', codigo: 'SUR', nombre: 'Sede Sur', estado: 'Lara', ciudad: 'Barquisimeto', direccion: 'Av. Ribereña, sector Sur', activa: true },
+  { id: 's4', codigo: 'ESTE', nombre: 'Sede Este', estado: 'Lara', ciudad: 'Barquisimeto', direccion: 'Av. Lara, sector Este', activa: true },
 ];
 export const CATEGORIAS = ['Lácteos', 'Panadería', 'Bebidas', 'Despensa', 'Frutas y verduras', 'Carnes', 'Limpieza', 'Cuidado personal'];
 export const UNIDADES = ['unidad', 'kg', 'litro', 'paquete', 'caja', 'botella'];
@@ -101,7 +102,7 @@ function seed(): StoreState {
       }
     }
   }
-  return { sedes: SEDES, productos, existencias, movimientos, historialPrecios: [], ventas, seq: 2000 };
+  return { usuarios: structuredClone(USUARIOS_DEMO), sedes: structuredClone(SEDES), productos, existencias, movimientos, historialPrecios: [], ventas, seq: 2000 };
 }
 
 function load(): StoreState {
@@ -109,7 +110,17 @@ function load(): StoreState {
     const raw = globalThis.localStorage?.getItem(KEY);
     if (raw) {
       const data = JSON.parse(raw) as StoreState;
-      if (data && Array.isArray(data.productos) && Array.isArray(data.existencias) && Array.isArray(data.ventas)) return data;
+      if (data && Array.isArray(data.sedes) && Array.isArray(data.productos) && Array.isArray(data.existencias) && Array.isArray(data.ventas)) {
+        // Amplía el estado v2 sin borrar el inventario ni las ventas guardadas.
+        data.sedes = data.sedes.map((s) => {
+          const base = SEDES.find((item) => item.id === s.id);
+          return { ...s, codigo: s.codigo ?? base?.codigo ?? s.id.toUpperCase(),
+            estado: s.estado ?? base?.estado ?? '', ciudad: s.ciudad ?? base?.ciudad ?? '',
+            direccion: s.direccion ?? base?.direccion ?? '', activa: s.activa ?? true };
+        });
+        data.usuarios ??= structuredClone(USUARIOS_DEMO);
+        return data;
+      }
     }
   } catch { /* almacenamiento no disponible: se usa memoria */ }
   return seed();
@@ -120,7 +131,7 @@ let state: StoreState | null = null;
 let serverState: StoreState | null = null;
 const listeners = new Set<() => void>();
 
-const getState = (): StoreState => (state ??= typeof window === 'undefined' ? seed() : load());
+export const getState = (): StoreState => (state ??= typeof window === 'undefined' ? seed() : load());
 const getServerState = (): StoreState => (serverState ??= seed());
 export const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 
@@ -150,14 +161,72 @@ export const getSede = (s: StoreState, id: string) => s.sedes.find((x) => x.id =
 export const getProducto = (s: StoreState, codigo: string) => s.productos.find((p) => p.codigo === codigo);
 export const getExistencia = (s: StoreState, sedeId: string, codigo: string) => findEx(s, sedeId, codigo);
 
-/** Administrador: todas las sedes. Otros roles: solo las de user.sedes. */
+/** Sedes activas: el administrador supervisa todas; los demás operan en una. */
 export function sedesDeUsuario(s: StoreState, user: User | null): Sede[] {
-  if (user?.role === 'admin') return s.sedes;
-  const ids = user?.sedes?.length ? user.sedes : s.sedes.slice(0, 2).map((x) => x.id);
-  return s.sedes.filter((x) => ids.includes(x.id));
+  if (!user?.activo) return [];
+  return s.sedes.filter((x) => x.activa && (user.role === 'admin' || x.id === user.sedeId));
 }
 export const sedesHabilitadas = (s: StoreState, codigo: string) =>
   s.existencias.filter((e) => e.productoCodigo === codigo && e.habilitado).map((e) => e.sedeId);
+
+/* ---------- Administración (F02, F03) ---------- */
+function esAdministrador(d: StoreState, actor: User): boolean {
+  return d.usuarios.some((u) => u.username === actor.username && u.activo && u.role === 'admin');
+}
+
+export interface DatosUsuario {
+  username: string; name: string; role: Rol; sedeId: string; activo: boolean; password: string;
+}
+
+/** Al editar, una contraseña vacía conserva la actual; el acceso es único e inmutable. */
+export function guardarUsuario(actor: User, input: DatosUsuario, usernameActual?: string): Result {
+  return mutate((d) => {
+    if (!esAdministrador(d, actor)) return fail('Solo el administrador puede gestionar usuarios.');
+    const actual = usernameActual ? d.usuarios.find((u) => u.username === usernameActual) : undefined;
+    if (usernameActual && !actual) return fail('El usuario no existe.');
+    const username = input.username.trim().toLowerCase();
+    if (!/^[a-z0-9._-]{3,30}$/.test(username)) return fail('El usuario debe tener entre 3 y 30 letras, números, puntos, guiones o guiones bajos.');
+    if (actual && username !== actual.username) return fail('El nombre de acceso no se puede cambiar.');
+    if (d.usuarios.some((u) => u.username === username && u !== actual)) return fail('Ese nombre de usuario ya existe.');
+    if (input.name.trim().length < 2) return fail('Escribe el nombre completo del usuario.');
+    if (!Object.hasOwn(ROLES, input.role)) return fail('Selecciona un rol válido.');
+    const sede = d.sedes.find((s) => s.id === input.sedeId);
+    if (!sede || (!sede.activa && (!actual || actual.sedeId !== sede.id || (!actual.activo && input.activo)))) return fail('Selecciona una sede activa.');
+    if ((!actual || input.password !== '') && input.password.trim().length < 4) return fail('La contraseña debe tener al menos 4 caracteres.');
+    if (actual?.username === actor.username && (!input.activo || input.role !== 'admin')) return fail('No puedes desactivar tu propia cuenta ni quitarte el rol de administrador.');
+    if (actual?.role === 'admin' && actual.activo && (!input.activo || input.role !== 'admin') &&
+      !d.usuarios.some((u) => u !== actual && u.activo && u.role === 'admin')) return fail('Debe quedar al menos un administrador activo.');
+    const next: CuentaDemo = {
+      username, name: input.name.trim(), role: input.role, label: ROLES[input.role].label,
+      sedeId: sede.id, activo: input.activo, password: input.password || actual!.password,
+    };
+    if (actual) Object.assign(actual, next); else d.usuarios.push(next);
+    return { ok: true };
+  });
+}
+
+export type DatosSede = Omit<Sede, 'id'>;
+export function guardarSede(actor: User, input: DatosSede, sedeId?: string): Result<{ id: string }> {
+  return mutate((d) => {
+    if (!esAdministrador(d, actor)) return fail('Solo el administrador puede gestionar sedes.');
+    const actual = sedeId ? d.sedes.find((s) => s.id === sedeId) : undefined;
+    if (sedeId && !actual) return fail('La sede no existe.');
+    const codigo = input.codigo.trim().toUpperCase();
+    if (!/^[A-Z0-9-]{2,16}$/.test(codigo)) return fail('El código debe tener de 2 a 16 letras, números o guiones.');
+    if (d.sedes.some((s) => s.codigo === codigo && s !== actual)) return fail('Ya existe una sede con ese código.');
+    if (input.nombre.trim().length < 2) return fail('Escribe el nombre de la sede.');
+    if (!input.estado.trim() || !input.ciudad.trim() || !input.direccion.trim()) return fail('Completa el estado geográfico, la ciudad y la dirección.');
+    if (!input.activa && !d.sedes.some((s) => s !== actual && s.activa)) return fail('Debe quedar al menos una sede activa.');
+    const id = actual?.id ?? `S-${d.seq++}`;
+    const next: Sede = { id, codigo, nombre: input.nombre.trim(), estado: input.estado.trim(), ciudad: input.ciudad.trim(), direccion: input.direccion.trim(), activa: input.activa };
+    if (actual) Object.assign(actual, next);
+    else {
+      d.sedes.push(next);
+      d.productos.forEach((p) => d.existencias.push({ sedeId: id, productoCodigo: p.codigo, cantidad: 0, stockMinimo: 5, habilitado: false }));
+    }
+    return { ok: true, id };
+  });
+}
 
 export function estadoStock(e: Pick<Existencia, 'cantidad' | 'stockMinimo'>): EstadoStock {
   if (e.cantidad <= 0) return 'agotado';
@@ -230,6 +299,7 @@ export function setActivo(codigo: string, activo: boolean): Result {
 
 export function habilitarEnSede(sedeId: string, codigo: string, habilitado: boolean): Result {
   return mutate((d) => {
+    if (!d.sedes.some((s) => s.id === sedeId && s.activa)) return fail('La sede está inactiva o no existe.');
     if (!d.sedes.some((x) => x.id === sedeId) || !d.productos.some((p) => p.codigo === codigo)) return fail('Sede o producto inexistente.');
     let e = findEx(d, sedeId, codigo);
     if (!e) { e = { sedeId, productoCodigo: codigo, cantidad: 0, stockMinimo: 5, habilitado: false }; d.existencias.push(e); }
@@ -257,6 +327,7 @@ export function setPrecioGlobal(codigo: string, precio: number | string, usuario
 export function registrarEntrada(sedeId: string, codigo: string, cantidad: number | string, motivo: string): Result<{ anterior: number; nueva: number }> {
   const n = Number(cantidad);
   return mutate((d) => {
+    if (!d.sedes.some((s) => s.id === sedeId && s.activa)) return fail('La sede está inactiva o no existe.');
     const e = findEx(d, sedeId, codigo);
     const p = d.productos.find((x) => x.codigo === codigo);
     if (!e || !e.habilitado || !p) return fail('Ese producto no está habilitado en la sede.');
@@ -273,6 +344,7 @@ export function registrarEntrada(sedeId: string, codigo: string, cantidad: numbe
 export function setStockMinimo(sedeId: string, codigo: string, minimo: number | string): Result {
   const n = Number(minimo);
   return mutate((d) => {
+    if (!d.sedes.some((s) => s.id === sedeId && s.activa)) return fail('La sede está inactiva o no existe.');
     const e = findEx(d, sedeId, codigo);
     if (!e || !e.habilitado) return fail('Ese producto no está habilitado en la sede.');
     if (minimo === '' || !Number.isInteger(n) || n < 0 || n > 100000) return fail('El mínimo debe ser un entero entre 0 y 100000.');
@@ -283,6 +355,7 @@ export function setStockMinimo(sedeId: string, codigo: string, minimo: number | 
 
 /* ---------- Caja (descuento de inventario y ventas) ---------- */
 function aplicarSalida(d: StoreState, sedeId: string, codigo: string, cantidad: number, motivo: string): string | null {
+  if (!d.sedes.some((s) => s.id === sedeId && s.activa)) return 'La sede está inactiva o no existe.';
   const e = findEx(d, sedeId, codigo);
   if (!e || !e.habilitado) return 'Ese producto no está habilitado en la sede.';
   if (!Number.isInteger(cantidad) || cantidad <= 0) return 'Cantidad inválida.';

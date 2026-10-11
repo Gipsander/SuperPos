@@ -21,15 +21,17 @@ type EstadoFiltro = 'todos' | 'activo' | 'inactivo';
  * Módulo 2 · Catálogo de productos (F04 registrar, F05 actualizar, F06 habilitar por sede).
  * Solo el administrador edita; cualquier otro rol lo consulta en modo lectura.
  */
-export function CatalogPanel({ user, embedded }: { user: User; embedded?: boolean }) {
+export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: User; embedded?: boolean; initialSedeId?: string }) {
   const state = useStore();
   const toast = useToast();
   const isAdmin = user.role === 'admin';
-  const sedes = useMemo(() => sedesDeUsuario(state, user), [state, user]);
+  const [sedeScope, setSedeScope] = useState(initialSedeId);
+  const disponibles = useMemo(() => sedesDeUsuario(state, user), [state, user]);
+  const sedes = disponibles.filter((s) => !sedeScope || s.id === sedeScope);
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('');
   const [estado, setEstado] = useState<EstadoFiltro>('todos');
-  const [vista, setVista] = useState<Vista>('lista');
+  const [vista, setVista] = useState<Vista>(initialSedeId ? 'sedes' : 'lista');
   const [form, setForm] = useState<{ codigo: string | null } | null>(null);
   const [quitar, setQuitar] = useState<{ sedeId: string; codigo: string } | null>(null);
 
@@ -45,7 +47,8 @@ export function CatalogPanel({ user, embedded }: { user: User; embedded?: boolea
     aplicarSede(sedeId, codigo, habilitar);
   }
   function aplicarSede(sedeId: string, codigo: string, habilitar: boolean) {
-    habilitarEnSede(sedeId, codigo, habilitar);
+    const result = habilitarEnSede(sedeId, codigo, habilitar);
+    if (!result.ok) { toast(result.error, 'error'); return; }
     toast(`${getProducto(state, codigo)?.nombre} ${habilitar ? 'habilitado en' : 'quitado de'} ${getSede(state, sedeId)?.nombre}`);
   }
 
@@ -78,6 +81,7 @@ export function CatalogPanel({ user, embedded }: { user: User; embedded?: boolea
           </Select>
         </div>
       </Toolbar>
+      {isAdmin && vista === 'sedes' && <div className="mb-4 max-w-sm"><Field label="Sede del catálogo">{(id) => <Select id={id} value={sedeScope} onChange={(e) => setSedeScope(e.target.value)}><option value="">Todas las sedes activas</option>{disponibles.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}</Select>}</Field></div>}
 
       {vista === 'lista' ? (
         <TableWrap caption="Catálogo de productos">
@@ -202,7 +206,7 @@ function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () =
           : (
             <fieldset className="rounded-[10px] border border-line px-3.5 py-3">
               <legend className="px-1 font-semibold text-strong">Habilitar en sedes</legend>
-              {state.sedes.map((s) => (
+              {state.sedes.filter((s) => s.activa).map((s) => (
                 <label key={s.id} className="flex min-h-9 cursor-pointer items-center gap-2.5">
                   <input type="checkbox" className="size-[18px] accent-brand" checked={sedesNuevo.includes(s.id)}
                     onChange={(e) => setSedesNuevo((l) => e.target.checked ? [...l, s.id] : l.filter((x) => x !== s.id))} />

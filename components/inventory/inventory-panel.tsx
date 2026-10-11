@@ -15,12 +15,12 @@ type Tab = 'stock' | 'ingreso' | 'minimos' | 'catalogo';
  * Módulo 5 · Inventario y reposición (F11 stock y faltantes, F12 ingreso, F13 mínimos).
  * El encargado opera solo en sus sedes; el administrador, en todas.
  */
-export function InventoryPanel({ user }: { user: User }) {
+export function InventoryPanel({ user, initialSedeId = '' }: { user: User; initialSedeId?: string }) {
   const state = useStore();
   const isAdmin = user.role === 'admin';
   const sedes = useMemo(() => sedesDeUsuario(state, user), [state, user]);
   const [tab, setTab] = useState<Tab>('stock');
-  const [elegida, setElegida] = useState('');
+  const [elegida, setElegida] = useState(initialSedeId);
   const sedeId = sedes.some((s) => s.id === elegida) ? elegida : sedes[0]?.id;
 
   if (!sedeId) {

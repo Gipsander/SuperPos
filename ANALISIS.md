@@ -1,10 +1,10 @@
 # SuperPOS — Análisis
 
-*10-10-2026 · Análisis del prototipo interactivo (v0.4 — migración a Next.js · módulos de inventario, caja y panel)*
+*10-10-2026 · Análisis del prototipo interactivo (v0.5 — usuarios y sedes integrados · mejoras de caja)*
 
 | Campo | Valor |
 |--------|--------|
-| **Estado** | **Prototipo funcional** — catálogo, precios, inventario, caja y panel listos · Usuarios y Sedes **pendientes** |
+| **Estado** | **Prototipo funcional** — usuarios, sedes, catálogo, precios, inventario, caja y panel listos |
 | **Grupo** | Grupo 1 — Rafael Ramírez (Módulo 1) · Gipsander Urdaneta (Módulos 2, 3 y 5) · Luis Galíndez (Módulos 4 y 6) |
 | **Tecnología** | Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · `localStorage` (sin base de datos) |
 | **Ejecución** | `npm run dev` → `http://127.0.0.1:3000` (solo local) |
@@ -55,7 +55,7 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 
 | Módulo | Responsable | Funcionalidades | Estado |
 |--------|-------------|-----------------|--------|
-| 1 · Usuarios y sedes | Rafael | F01 Acceder · F02 Gestionar usuarios · F03 Gestionar sedes | F01 **demo** · F02 y F03 **pendientes** |
+| 1 · Usuarios y sedes | Rafael | F01 Acceder · F02 Gestionar usuarios · F03 Gestionar sedes | F01 **demo** · F02 y F03 **listos** |
 | 2 · Catálogo de productos | Gipsander | F04 Registrar · F05 Actualizar · F06 Habilitar por sede | **Listo** |
 | 3 · Gestión de precios | Gipsander | F07 Modificar precio global | **Listo** |
 | 4 · Punto de venta / Caja | Luis | F08 a F10 | **Listo** (ver [§8](#8-interrogantes-que-quedan)) |
@@ -65,6 +65,7 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 ### Alcance de esta versión
 
 - Navegación y diseño por rol (barra lateral del administrador; barra superior para los demás).
+- Usuarios con rol y sede única; sedes con ubicación y estado. Las cuentas nuevas permiten iniciar sesión y las sedes nuevas empiezan sin productos habilitados ni stock.
 - Catálogo, precios e inventario con permisos, alertas y movimientos.
 - Caja con catálogo de venta, carrito, cobro (efectivo, tarjeta, transferencia) y recibo imprimible.
 - Panel con indicadores, tres gráficos SVG y listados (ventas, faltantes, movimientos).
@@ -72,7 +73,6 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 
 ### Fuera de alcance
 
-- Gestión de usuarios y de sedes (F02 y F03).
 - Base de datos o servidor; autenticación real.
 - Impuestos, facturación fiscal, devoluciones y anulación de ventas.
 - Publicación en línea (se deja preparada la exportación estática).
@@ -105,7 +105,7 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 
 | Acción | Administrador | Encargado de inventario | Cajero |
 |--------|:---:|:---:|:---:|
-| Ver stock y faltantes (F11) | ✅ todas las sedes | ✅ sus sedes | — |
+| Ver stock y faltantes (F11) | ✅ todas las sedes | ✅ su sede | — |
 | Registrar mercancía (F12) | ✅ | ✅ | — |
 | Configurar mínimos (F13) | ✅ | ✅ | — |
 | Consultar catálogo y precio | ✅ | ✅ solo lectura | — |
@@ -114,7 +114,7 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 | Vender en caja | ✅ cualquier sede | — | ✅ su sede |
 | Ver panel y reportes | ✅ | — | — |
 
-**Sedes por usuario (demostración):** `rafael` = todas · `gipsander` = Centro y Norte · `luis` = Centro.
+**Sedes por usuario (demostración):** `rafael` = todas · `gipsander` = Centro · `luis` = Centro.
 
 ### 2.3 Cuentas de demostración
 
@@ -184,11 +184,11 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 | A6 | Ingreso con cantidad no entera, ≤ 0 o > 100 000 | **Rechazo** |
 | A7 | Ingreso sobre producto inactivo o no habilitado en la sede | **Rechazo** |
 | A8 | Mínimo no entero o negativo | **Rechazo** y el valor vuelve al anterior |
-| A9 | Producto agotado en caja | No se puede agregar (botón **Sin stock**) |
+| A9 | Producto agotado en caja | Se muestra al final del catálogo y no se puede agregar (botón **Sin stock**) |
 | A10 | Cantidad en carrito mayor al stock | Botón **+** deshabilitado y aviso; el cobro se bloquea |
 | A11 | Efectivo recibido menor al total | **Rechazo** con mensaje |
 | A12 | Carrito vacío | **Cobrar** deshabilitado |
-| A13 | Cambio de sede con el carrito lleno | Se **vacía** el carrito con aviso |
+| A13 | Administrador cambia de sede con el carrito lleno | Se **vacía** el carrito con aviso |
 | A14 | Producto inactivo | No aparece en stock ni en caja |
 | A15 | Encargado o cajero ante opciones de administración | No se muestran los controles (solo lectura) |
 | A16 | Usuario o contraseña incorrectos | Mensaje de error y foco en el campo |
@@ -217,6 +217,9 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 ### Modelo de datos
 
 ```text
+Sede            { id, codigo, nombre, estado, ciudad, direccion, activa }
+Usuario         { username, name, role, label, sedeId, activo }
+CuentaDemo      { ...Usuario, password }
 Producto        { codigo, nombre, categoria, unidadMedida, precioGlobal, activo }
 Existencia      { sedeId, productoCodigo, cantidad, stockMinimo, habilitado }
 MovimientoInventario { id, sedeId, productoCodigo, fecha, tipo, cantidad, motivo }
@@ -235,7 +238,7 @@ public/       logo.svg
 
 ### API del store
 
-`crearProducto` · `actualizarProducto` · `setActivo` · `habilitarEnSede` · `setPrecioGlobal` · `registrarEntrada` · `setStockMinimo` · `descontarStock` · `registrarVenta`.
+`guardarUsuario` · `guardarSede` · `crearProducto` · `actualizarProducto` · `setActivo` · `habilitarEnSede` · `setPrecioGlobal` · `registrarEntrada` · `setStockMinimo` · `descontarStock` · `registrarVenta`.
 
 [↑ Volver al índice](#índice)
 
@@ -251,7 +254,7 @@ public/       logo.svg
 | **F1** | Catálogo, precios e inventario en el prototipo base (Gipsander) | Hecho |
 | **F2** | Migración a Next.js, React, TypeScript y Tailwind; store tipado | Hecho |
 | **F3** | Caja y panel con gráficos conectados al store | Hecho |
-| **F4** | Usuarios y roles · Sedes (Rafael) | Pendiente |
+| **F4** | Usuarios y roles · Sedes (Rafael) | Hecho |
 | **F5** | Publicación en línea y, si se requiere, base de datos real | Pendiente |
 
 ```text
@@ -277,13 +280,13 @@ UI (React) ──useStore()──► lib/store.ts ──► localStorage
 | D5 | **Stock bajo** si `cantidad < stockMínimo`; **agotado** si `cantidad = 0` | **No** |
 | D6 | Cantidades de stock **enteras**; el ingreso crea un movimiento `ENTRADA` | **No** |
 | D7 | La venta es **atómica** (`registrarVenta`): valida todo el carrito y descuenta con la misma lógica de `descontarStock` | **No** |
-| D8 | El alcance por **sede** y por **rol** se define en la sesión (`gipsander` = Centro y Norte · `luis` = Centro) | **No** |
+| D8 | Cada usuario tiene **una sede asignada** y un rol guardados en el store; el administrador supervisa todas. El cajero ve su sede como texto fijo | **No** |
 | D9 | La sesión vive **solo en memoria**; el acceso es de demostración | **No** |
 | D10 | Los productos **no se eliminan**: se **desactivan** | **No** |
 | D11 | Historial de ventas de **7 días** como datos de ejemplo, determinista, para que el panel no empiece vacío | **No** |
 | D12 | El servidor de desarrollo escucha solo en **`127.0.0.1`** | **No** |
 | D13 | Se mantiene la **exportación estática** para poder publicar en GitHub Pages | **No** |
-| D14 | Usuarios y Sedes se muestran como **«Próximamente»** hasta que Rafael los desarrolle | **Sí** |
+| D14 | Usuarios y Sedes implementados: crear, editar y activar/desactivar, con persistencia local e integración con catálogo, inventario y caja | **No** |
 
 [↑ Volver al índice](#índice)
 
@@ -296,10 +299,10 @@ UI (React) ──useStore()──► lib/store.ts ──► localStorage
 | # | Tema | Detalle |
 |---|------|---------|
 | 1 | **Correspondencia F08–F10 y F14–F16** | Confirmar con Luis qué funcionalidad exacta es cada código. El repositorio no traía código previo de estos módulos: se desarrollaron en la migración a partir del alcance general de cada módulo |
-| 2 | **Permisos en el almacén de datos** | Hoy el control por rol está en la **interfaz**: el store no valida quién llama. Para un sistema real, la validación debe ir en un servidor |
+| 2 | **Permisos en el almacén de datos** | La interfaz limita las opciones por rol y las operaciones de usuarios/sedes comprueban el administrador en el store. Sigue siendo una simulación local; para un sistema real, la validación debe ir en un servidor |
 | 3 | **Acceso real** | El acceso por usuario y contraseña es solo de demostración |
 | 4 | **Datos por navegador** | `localStorage` no se comparte entre equipos ni sedes reales; una base de datos lo resolvería |
-| 5 | **Usuarios y Sedes** | F02 y F03 siguen pendientes (Rafael) |
+| 5 | **Usuarios y Sedes** | F02 y F03 implementados y verificados con seis pruebas automáticas y un recorrido en navegador |
 | 6 | **Publicación** | Falta decidir si se publica en línea y con qué acción de GitHub |
 
 [↑ Volver al índice](#índice)
@@ -312,7 +315,7 @@ UI (React) ──useStore()──► lib/store.ts ──► localStorage
 
 | # | Tema | Cierre |
 |---|------|--------|
-| 1 | Alcance | Catálogo, precios, inventario, caja y panel funcionales · Usuarios y Sedes pendientes |
+| 1 | Alcance | Usuarios, sedes, catálogo, precios, inventario, caja y panel funcionales |
 | 2 | Datos | `localStorage`, sin base de datos |
 | 3 | Reglas de stock | Agotado `= 0` · bajo `< mínimo` · faltan `= mínimo − cantidad` |
 | 4 | Precio | Un único precio global; el cambio aplica a nuevas ventas |
@@ -330,3 +333,4 @@ UI (React) ──useStore()──► lib/store.ts ──► localStorage
 | 0.2 | 10-10-2026 | Catálogo, precios e inventario con permisos, alertas y movimientos (Gipsander) |
 | 0.3 | 10-10-2026 | Migración a Next.js, React, TypeScript y Tailwind; caja y panel con gráficos |
 | 0.4 | 10-10-2026 | Documentación: guía de uso y este análisis |
+| 0.5 | 10-10-2026 | Usuarios y sedes integrados, sede fija del cajero, agotados al final y seis pruebas automáticas |

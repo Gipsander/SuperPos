@@ -1,6 +1,14 @@
 export type Rol = 'admin' | 'inventario' | 'cajero';
 
-export interface Sede { id: string; nombre: string }
+export interface Sede {
+  id: string;
+  codigo: string;
+  nombre: string;
+  estado: string;
+  ciudad: string;
+  direccion: string;
+  activa: boolean;
+}
 
 /** El producto no se duplica por sede: un único precio global. */
 export interface Producto {
@@ -65,6 +73,7 @@ export interface Venta {
 }
 
 export interface StoreState {
+  usuarios: CuentaDemo[];
   sedes: Sede[];
   productos: Producto[];
   existencias: Existencia[];
@@ -89,5 +98,9 @@ export interface User {
   name: string;
   role: Rol;
   label: string;
-  sedes?: string[];
+  sedeId: string;
+  activo: boolean;
 }
+
+/** Credenciales ficticias para recorrer el prototipo. */
+export interface CuentaDemo extends User { password: string }

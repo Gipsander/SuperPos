@@ -13,7 +13,7 @@ export function LoginScreen() {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     if (!login(String(f.get('username')), String(f.get('password')))) {
-      setError('Usuario o contraseña incorrectos. Inténtalo de nuevo.');
+      setError('No se pudo ingresar. Revisa el usuario y la contraseña, o consulta si tu cuenta y sede están activas.');
       pass.current?.focus();
     }
   }

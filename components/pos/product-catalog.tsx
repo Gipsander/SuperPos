@@ -17,7 +17,8 @@ export function ProductCatalog({ rows, enCarrito, onAdd }: {
   const categorias = useMemo(() => [...new Set(rows.map((r) => r.producto.categoria))].sort(), [rows]);
   const list = useMemo(() => rows
     .filter((r) => (!cat || r.producto.categoria === cat) && (!q || norm(r.producto.nombre).includes(norm(q)) || norm(r.productoCodigo).includes(norm(q))))
-    .sort((a, b) => a.producto.nombre.localeCompare(b.producto.nombre, 'es')), [rows, q, cat]);
+    .sort((a, b) => Number(a.estado === 'agotado') - Number(b.estado === 'agotado') ||
+      a.producto.nombre.localeCompare(b.producto.nombre, 'es')), [rows, q, cat]);
 
   return (
     <div>
