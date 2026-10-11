@@ -25,7 +25,7 @@ const PAGES = new Set<string>(['inicio', ...ADMIN_MODULES.map((m) => m.id)]);
 
 const Brand = () => (
   // eslint-disable-next-line @next/next/no-img-element
-  <span className="inline-flex items-center gap-2.5 text-[23px] font-bold tracking-tight text-brand"><img src={asset('/logo.svg')} alt="" width={40} height={40} />Superpos</span>
+  <span className="inline-flex items-center gap-2.5 text-[23px] font-bold tracking-tight text-brand"><img src={asset('/logo.svg')} alt="" width={40} height={40} />SuperPOS</span>
 );
 
 function Profile({ user }: { user: User }) {
@@ -87,7 +87,7 @@ function AdminShell({ user }: { user: User }) {
       </aside>
       <div className="min-w-0">
         <header className="flex items-center justify-between gap-3 border-b border-line bg-white px-5 py-3 md:px-8">
-          <div className="flex items-center gap-2 text-[13px] text-muted"><span>Superpos</span><span aria-hidden="true">/</span><strong className="text-strong">{current?.title ?? 'Inicio'}</strong></div>
+          <div className="flex items-center gap-2 text-[13px] text-muted"><span>SuperPOS</span><span aria-hidden="true">/</span><strong className="text-strong">{current?.title ?? 'Inicio'}</strong></div>
           <Profile user={user} />
         </header>
         <main id="content" tabIndex={-1} className="px-5 py-6 outline-none md:px-8 md:py-8">

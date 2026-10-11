@@ -22,10 +22,10 @@ export function LoginScreen() {
     <main className="grid min-h-dvh place-items-center bg-gradient-to-b from-brand-soft to-page px-4 py-10">
       <div className="flex w-full max-w-[420px] flex-col items-center gap-5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <span className="inline-flex items-center gap-3 text-[23px] font-bold tracking-tight text-brand"><img src={asset('/logo.svg')} alt="" width={40} height={40} />Superpos</span>
+        <span className="inline-flex items-center gap-3 text-[23px] font-bold tracking-tight text-brand"><img src={asset('/logo.svg')} alt="" width={40} height={40} />SuperPOS</span>
         <section aria-labelledby="login-title" className="w-full rounded-[20px] border border-line bg-white p-7 shadow-sm">
           <h1 id="login-title" className="mb-1 text-[26px] font-bold tracking-tight text-strong">¡Hola de nuevo!</h1>
-          <p className="mb-5 text-muted">Inicia sesión para entrar a Superpos.</p>
+          <p className="mb-5 text-muted">Inicia sesión para entrar a SuperPOS.</p>
           <form onSubmit={submit} onChange={() => setError('')} className="flex flex-col gap-4" noValidate>
             <Field label="Usuario">
               {(id) => <Input id={id} name="username" placeholder="Ingresa tu usuario" autoComplete="username" autoCapitalize="none" spellCheck={false} required aria-invalid={!!error} />}
