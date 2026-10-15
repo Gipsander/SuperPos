@@ -2,6 +2,7 @@
 import { Printer } from 'lucide-react';
 import type { Venta } from '@/lib/types';
 import { asset, fechaHora, money, num } from '@/lib/format';
+import { importeLinea } from '@/lib/pos';
 import { getSede, useStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
@@ -20,11 +21,12 @@ export function ReceiptModal({ venta, onClose }: { venta: Venta; onClose: () => 
           <span className="text-muted">{getSede(state, venta.sedeId)?.nombre} · Folio {venta.id}</span>
           <span className="text-muted">{fechaHora(venta.fecha)} · Cajero: {venta.cajero}</span>
         </div>
+        {venta.cliente && <div className="border-b border-dashed border-edge pb-3"><strong>{venta.cliente.nombres} {venta.cliente.apellidos}</strong><span className="block text-muted">Documento: {venta.cliente.cedula}</span></div>}
         <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
           {venta.items.map((it) => (
             <li key={it.codigo} className="flex justify-between gap-3">
               <span>{num(it.cantidad)} × {it.nombre}<span className="block text-xs text-muted">{money(it.precio)} / {it.unidadMedida}</span></span>
-              <span className="tabular-nums">{money(it.cantidad * it.precio)}</span>
+              <span className="tabular-nums">{money(importeLinea(it.precio, it.cantidad))}</span>
             </li>
           ))}
         </ul>

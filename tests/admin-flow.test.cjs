@@ -121,3 +121,106 @@ test('migra datos v2 y recupera cuentas persistidas sin perder operaciones', () 
   assert.equal(reloaded.getState().usuarios.at(-1).username, 'ana.demo');
   assert.equal(reloaded.getState().usuarios.at(-1).sedeId, 's2');
 });
+
+test('clientes: validación, cédula única, permisos y recuperación al recargar', () => {
+  const cashier = auth.login('luis', 'admin');
+  const input = { direccion: 'Calle de prueba, casa 1', telefonoConocido: '04140000000', cedula: ' v 12.345.678 ', nombres: 'Ana María', apellidos: 'Pérez López', telefono: '0412-1234567' };
+  const result = store.registrarCliente(cashier, input);
+  assert.equal(result.ok, true);
+  assert.equal(result.cliente.cedula, 'V-12345678');
+  assert.equal(store.buscarCliente(store.getState(), '12345678').nombres, 'Ana María');
+  const before = JSON.stringify(store.getState());
+  for (const changes of [{ cedula: 'V-12345678' }, { cedula: 'X-99999999' }, { cedula: '00000' }, { cedula: '87654321', nombres: '' }, { cedula: '87654321', telefono: 'hola1234567890' }]) {
+    assert.equal(store.registrarCliente(cashier, { ...input, ...changes }).ok, false);
+  }
+  const inventory = store.getState().usuarios.find((u) => u.role === 'inventario');
+  assert.equal(store.registrarCliente(inventory, { ...input, cedula: '87654321' }).ok, false);
+  assert.equal(JSON.stringify(store.getState()), before);
+  delete require.cache[storePath];
+  const restored = require(storePath);
+  assert.equal(restored.buscarCliente(restored.getState(), 'V-12345678').telefono, '04121234567');
+  assert.equal(store.registrarCliente(admin(), { ...input, cedula: 'E-12345678' }).ok, true);
+});
+
+test('migración incorpora clientes sin borrar ventas ni inventario anteriores', () => {
+  const legacy = structuredClone(store.getState()); delete legacy.clientes;
+  saved.set('superpos.store.v2', JSON.stringify(legacy));
+  delete require.cache[storePath];
+  const restored = require(storePath);
+  assert.deepEqual(restored.getState().clientes, []);
+  assert.deepEqual(restored.getState().existencias, legacy.existencias);
+  assert.deepEqual(restored.getState().ventas, legacy.ventas);
+});
+
+test('venta por peso: cliente en recibo, redondeo monetario y descuento exacto', () => {
+  const input = { direccion: 'Calle de prueba, casa 1', telefonoConocido: '04140000000', cedula: '12345678', nombres: 'Ana', apellidos: 'Pérez', telefono: '04121234567' };
+  assert.equal(store.registrarCliente(admin(), input).ok, true);
+  const before = store.getExistencia(store.getState(), 's1', 'L-002').cantidad;
+  const result = store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 0.333 }], 'efectivo', 'Luis', 10, input.cedula);
+  assert.equal(result.ok, true);
+  assert.equal(result.venta.total, 2.26);
+  assert.equal(result.venta.cliente.nombres, 'Ana');
+  assert.equal(result.venta.cliente.cedula, 'V-12345678');
+  assert.equal(store.getExistencia(store.getState(), 's1', 'L-002').cantidad, before - 0.333);
+  assert.equal(store.registrarEntrada('s1', 'L-002', 0.333, 'Peso').ok, true);
+  assert.equal(store.getExistencia(store.getState(), 's1', 'L-002').cantidad, before);
+  const persisted = JSON.parse(saved.get('superpos.store.v2'));
+  assert.equal(persisted.ventas.at(-1).cliente.cedula, 'V-12345678');
+});
+
+test('venta inválida no descuenta stock ni guarda datos parciales', () => {
+  const before = JSON.stringify(store.getState());
+  for (const quantity of [0, -1, NaN, Infinity, 0.1234, 999999]) {
+    assert.equal(store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: quantity }], 'tarjeta', 'Luis').ok, false);
+  }
+  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-003', cantidad: 0.5 }], 'tarjeta', 'Luis').ok, false);
+  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }], 'efectivo', 'Luis', NaN).ok, false);
+  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }], 'tarjeta', 'Luis', undefined, 'V-87654321').ok, false);
+  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }, { codigo: 'L-001', cantidad: 1 }], 'tarjeta', 'Luis').ok, false);
+  assert.equal(JSON.stringify(store.getState()), before);
+});
+
+test('códigos de barras: altas, edición, unicidad y colisiones con códigos internos', () => {
+  const base = { codigo: 'P-025', codigoBarras: '0123456789012', nombre: 'Producto de prueba', categoria: 'Despensa', unidadMedida: 'unidad', precioGlobal: 2 };
+  assert.equal(store.crearProducto(base).ok, true);
+  assert.equal(store.getProducto(store.getState(), base.codigo).codigoBarras, base.codigoBarras);
+  assert.equal(store.crearProducto({ ...base, codigo: 'P-026' }).ok, false);
+  assert.equal(store.crearProducto({ ...base, codigo: base.codigoBarras, codigoBarras: '' }).ok, false);
+  assert.equal(store.actualizarProducto('L-002', { ...base, codigoBarras: base.codigoBarras }).ok, false);
+  assert.equal(store.actualizarProducto('L-002', { ...base, codigoBarras: 'abc' }).ok, false);
+  assert.equal(store.actualizarProducto(base.codigo, { ...base, codigoBarras: '9876543210987' }).ok, true);
+  assert.equal(store.actualizarProducto(base.codigo, { ...base, codigoBarras: '' }).ok, true);
+});
+
+test('documentos flexibles: extranjero corto, RIF largo y precisión sin pérdida', () => {
+  const base = { nombres: 'Ana', apellidos: 'Pérez', telefono: '04121234567', direccion: 'Av. Prueba, casa 1', telefonoConocido: '02125551234' };
+  for (const cedula of ['E-12', 'V-1234', 'J-00123456789012345678901234567890', 'G-1234567890']) {
+    const result = store.registrarCliente(admin(), { ...base, cedula, apellidos: cedula.startsWith('J') || cedula.startsWith('G') ? '' : base.apellidos });
+    assert.equal(result.ok, true);
+    assert.equal(result.cliente.cedula, cedula);
+    assert.equal(store.buscarCliente(store.getState(), cedula).direccion, base.direccion);
+  }
+  assert.equal(store.buscarCliente(store.getState(), ' e 0012 ').cedula, 'E-12');
+  assert.equal(store.registrarCliente(admin(), { ...base, cedula: 'E-0012' }).ok, false);
+  assert.equal(store.registrarCliente(admin(), { ...base, cedula: 'J-00123456789012345678901234567891' }).ok, true);
+  delete require.cache[storePath];
+  const restored = require(storePath);
+  assert.equal(restored.buscarCliente(restored.getState(), 'E-12').telefonoConocido, base.telefonoConocido);
+});
+
+test('dirección requerida, contacto alternativo opcional y registros antiguos compatibles', () => {
+  const base = { cedula: 'E-123', nombres: 'Ana', apellidos: 'Pérez', telefono: '04121234567', direccion: 'Calle de prueba' };
+  const before = JSON.stringify(store.getState());
+  assert.equal(store.registrarCliente(admin(), { ...base, direccion: '' }).ok, false);
+  assert.equal(store.registrarCliente(admin(), { ...base, telefonoConocido: 'incorrecto' }).ok, false);
+  assert.equal(store.registrarCliente(admin(), { ...base, apellidos: '' }).ok, false);
+  assert.equal(JSON.stringify(store.getState()), before);
+  assert.equal(store.registrarCliente(admin(), base).ok, true);
+  const legacy = structuredClone(store.getState());
+  legacy.clientes = [{ cedula: 'V-12345678', nombres: 'Cliente', apellidos: 'Anterior', telefono: '04120000000' }];
+  saved.set('superpos.store.v2', JSON.stringify(legacy));
+  delete require.cache[storePath];
+  const restored = require(storePath);
+  assert.equal(restored.buscarCliente(restored.getState(), '12.345.678').apellidos, 'Anterior');
+  assert.equal(restored.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }], 'tarjeta', 'Luis', undefined, 'V-12345678').ok, true);
+});

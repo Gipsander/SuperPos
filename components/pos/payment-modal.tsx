@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import type { MetodoPago } from '@/lib/types';
+import type { Cliente, MetodoPago } from '@/lib/types';
 import { money } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { ErrorBox, Field, Input } from '@/components/ui/form';
@@ -8,8 +8,8 @@ import { Modal } from '@/components/ui/modal';
 import { PaymentMethodSelector } from './payment-method-selector';
 
 /** Cobro: elige el método y, en efectivo, calcula el cambio. `onConfirm` devuelve un mensaje si algo falla. */
-export function PaymentModal({ total, onClose, onConfirm }: {
-  total: number; onClose: () => void; onConfirm: (metodo: MetodoPago, recibido?: number) => string | null;
+export function PaymentModal({ total, cliente, onClose, onConfirm }: {
+  total: number; cliente: Cliente; onClose: () => void; onConfirm: (metodo: MetodoPago, recibido?: number) => string | null;
 }) {
   const [metodo, setMetodo] = useState<MetodoPago>('efectivo');
   const [recibido, setRecibido] = useState('');
@@ -34,6 +34,7 @@ export function PaymentModal({ total, onClose, onConfirm }: {
           <span className="text-muted">Total a cobrar</span>
           <strong className="text-[28px] tracking-tight text-strong tabular-nums">{money(total)}</strong>
         </div>
+        <p className="m-0 text-sm text-muted">Cliente: <strong>{cliente.nombres} {cliente.apellidos}</strong> · {cliente.cedula}</p>
         <PaymentMethodSelector value={metodo} onChange={(m) => { setMetodo(m); setError(''); }} />
         {metodo === 'efectivo' && (
           <Field label="Efectivo recibido (USD)" hint={recibido !== '' && monto >= total ? `Cambio a entregar: ${money(cambio)}` : 'Ingresa el monto entregado por el cliente.'}>

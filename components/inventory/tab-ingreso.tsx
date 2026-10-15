@@ -49,7 +49,7 @@ export function TabIngreso({ sedeId }: { sedeId: string }) {
           <Field label="Cantidad recibida">
             {(id) => (
               <div className="flex flex-wrap gap-2">
-                <Input id={id} type="number" min={1} step={1} inputMode="numeric" required className="min-w-0 flex-1 basis-[120px]" value={cant} aria-invalid={!!error && !!codigo}
+                <Input id={id} type="number" min={p?.unidadMedida === 'kg' ? 0.001 : 1} step={p?.unidadMedida === 'kg' ? 0.001 : 1} inputMode="decimal" required className="min-w-0 flex-1 basis-[120px]" value={cant} aria-invalid={!!error && !!codigo}
                   onChange={(e) => { setCant(e.target.value); setError(''); }} />
                 {falta > 0 && <Button onClick={() => setCant(String(falta))}>Reponer faltante ({num(falta)})</Button>}
               </div>

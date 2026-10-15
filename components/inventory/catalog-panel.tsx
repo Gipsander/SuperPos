@@ -38,7 +38,7 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
   const list = useMemo(() => state.productos.filter((p) =>
     (!cat || p.categoria === cat) &&
     (estado === 'todos' || (estado === 'activo') === p.activo) &&
-    (!q || norm(p.nombre).includes(norm(q)) || norm(p.codigo).includes(norm(q))),
+    (!q || norm(p.nombre).includes(norm(q)) || norm(p.codigo).includes(norm(q)) || (p.codigoBarras ?? '').includes(q.trim())),
   ).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')), [state.productos, q, cat, estado]);
 
   function toggleSede(sedeId: string, codigo: string, habilitar: boolean) {
@@ -96,7 +96,7 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
             {list.length === 0 && <tr><td colSpan={7}><EmptyState title="No hay productos para mostrar" icon={SearchX}>Cambia la búsqueda o los filtros{isAdmin ? ', o registra un producto nuevo' : ''}.</EmptyState></td></tr>}
             {list.map((p) => (
               <tr key={p.codigo} className="group hover:bg-[#f8fbfe]">
-                <th scope="row" className={cx(tdCls, 'text-left font-normal')}><strong className="text-strong">{p.nombre}</strong><Sub>{p.codigo}</Sub></th>
+                <th scope="row" className={cx(tdCls, 'text-left font-normal')}><strong className="text-strong">{p.nombre}</strong><Sub>{p.codigo}{p.codigoBarras ? ` · Barras: ${p.codigoBarras}` : ''}</Sub></th>
                 <td className={tdCls}>{p.categoria}</td><td className={tdCls}>{p.unidadMedida}</td>
                 <td className={cx(tdCls, numCls)}>{money(p.precioGlobal)}</td>
                 <td className={tdCls}>{sedesHabilitadas(state, p.codigo).filter((id) => sedes.some((s) => s.id === id)).length} de {sedes.length}</td>
@@ -160,7 +160,7 @@ function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () =
   const toast = useToast();
   const editando: Producto | undefined = codigo ? getProducto(state, codigo) : undefined;
   const [f, setF] = useState({
-    nombre: editando?.nombre ?? '', categoria: editando?.categoria ?? CATEGORIAS[0],
+    codigoBarras: editando?.codigoBarras ?? '', nombre: editando?.nombre ?? '', categoria: editando?.categoria ?? CATEGORIAS[0],
     unidadMedida: editando?.unidadMedida ?? 'unidad', precio: '', activo: editando?.activo ?? true,
   });
   const codigoMostrado = editando ? editando.codigo : f.categoria ? siguienteCodigo(state.productos, f.categoria) : 'Selecciona categoría...';
@@ -171,11 +171,11 @@ function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () =
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (editando) {
-      const r = actualizarProducto(editando.codigo, { nombre: f.nombre, categoria: f.categoria, unidadMedida: f.unidadMedida, activo: f.activo });
+      const r = actualizarProducto(editando.codigo, { codigoBarras: f.codigoBarras, nombre: f.nombre, categoria: f.categoria, unidadMedida: f.unidadMedida, activo: f.activo });
       if (!r.ok) { setError(r.error); return; }
       toast(`Cambios guardados en ${f.nombre.trim()}`);
     } else {
-      const r = crearProducto({ nombre: f.nombre, categoria: f.categoria, unidadMedida: f.unidadMedida, precioGlobal: f.precio, activo: f.activo });
+      const r = crearProducto({ codigoBarras: f.codigoBarras, nombre: f.nombre, categoria: f.categoria, unidadMedida: f.unidadMedida, precioGlobal: f.precio, activo: f.activo });
       if (!r.ok) { setError(r.error); return; }
       sedesNuevo.forEach((id) => habilitarEnSede(id, r.codigo, true));
       toast(`Producto ${r.codigo} registrado`);
@@ -187,6 +187,7 @@ function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () =
     <Modal title={editando ? 'Editar producto' : 'Nuevo producto'} onClose={onClose}>
       <form onSubmit={submit} noValidate className="flex flex-col gap-3.5">
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <Field label="Código de barras" hint="Opcional. Escanea la etiqueta del producto; debe ser único.">{(id, desc) => <Input id={id} aria-describedby={desc} value={f.codigoBarras} inputMode="numeric" maxLength={14} autoComplete="off" onChange={(e) => set('codigoBarras', e.target.value)} />}</Field>
           <Field label="Nombre">{(id) => <Input id={id} value={f.nombre} maxLength={60} autoComplete="off" onChange={(e) => set('nombre', e.target.value)} />}</Field>
           <Field label="Categoría">
             {(id) => (

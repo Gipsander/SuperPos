@@ -1,8 +1,9 @@
 import { useSyncExternalStore } from 'react';
 import type {
   Existencia, EstadoStock, FilaStock, MetodoPago, MovimientoInventario, Producto, Result, Sede,
-  StoreState, User, Venta, VentaItem, Rol, CuentaDemo,
+  StoreState, User, Venta, VentaItem, Rol, CuentaDemo, Cliente,
 } from './types';
+import { cantidadValida, importeLinea, normalizarCedula, redondearCantidad } from './pos';
 import { ROLES, USUARIOS_DEMO } from './roles';
 
 // Estado compartido de SuperPOS (catálogo, existencias por sede, movimientos y ventas).
@@ -109,7 +110,7 @@ function seed(): StoreState {
         const id = `V-${++n}`;
         ventas.push({
           id, sedeId: sede.id, fecha, items, metodo: metodos[Math.floor(rnd() * 3)], cajero: 'Luis',
-          total: Math.round(items.reduce((t, it) => t + it.cantidad * it.precio, 0) * 100) / 100,
+          total: Math.round(items.reduce((t, it) => t + importeLinea(it.precio, it.cantidad), 0) * 100) / 100,
         });
         items.forEach((it, k) => movimientos.push({
           id: `M-${id}-${k}`, sedeId: sede.id, productoCodigo: it.codigo, fecha, tipo: 'SALIDA', cantidad: it.cantidad, motivo: 'Venta POS / Caja',
@@ -117,7 +118,7 @@ function seed(): StoreState {
       }
     }
   }
-  return { usuarios: structuredClone(USUARIOS_DEMO), sedes: structuredClone(SEDES), productos, existencias, movimientos, historialPrecios: [], ventas, seq: 2000 };
+  return { clientes: [], usuarios: structuredClone(USUARIOS_DEMO), sedes: structuredClone(SEDES), productos, existencias, movimientos, historialPrecios: [], ventas, seq: 2000 };
 }
 
 /** Datos guardados con la nomenclatura anterior (P-001…P-024 para todo): recodifica por categoría en todas las referencias. */
@@ -154,6 +155,7 @@ function load(): StoreState {
             estado: s.estado ?? base?.estado ?? '', ciudad: s.ciudad ?? base?.ciudad ?? '',
             direccion: s.direccion ?? base?.direccion ?? '', activa: s.activa ?? true };
         });
+        data.clientes ??= [];
         data.usuarios ??= structuredClone(USUARIOS_DEMO);
         migrarCodigosLegacy(data);
         return data;
@@ -305,37 +307,78 @@ export function getMovimientos(s: StoreState, opts: { sedeId?: string; limit?: n
 export const getHistorialPrecios = (s: StoreState, limit = 20) =>
   [...s.historialPrecios].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, limit);
 
+/* ---------- Clientes de caja ---------- */
+export function buscarCliente(s: StoreState, cedula: string): Cliente | undefined {
+  const key = normalizarCedula(cedula);
+  return s.clientes.find((c) => c.cedula === key);
+}
+
+export function registrarCliente(actor: User, input: Cliente): Result<{ cliente: Cliente }> {
+  return mutate((d) => {
+    const cuenta = d.usuarios.find((u) => u.username === actor.username && u.activo);
+    if (!cuenta || !['admin', 'cajero'].includes(cuenta.role) || !sedesDeUsuario(d, cuenta).length) return fail('No tienes permiso para registrar clientes.');
+    const cedula = normalizarCedula(input.cedula);
+    if (!cedula) return fail('Selecciona el tipo de documento e ingresa su número.');
+    if (d.clientes.some((c) => c.cedula === cedula)) return fail('Ya existe un cliente con ese documento. Consúltalo nuevamente.');
+    const nombres = input.nombres.trim().replace(/\s+/g, ' ');
+    const apellidos = input.apellidos.trim().replace(/\s+/g, ' ');
+    const empresa = /^[JG]-/.test(cedula);
+    if (nombres.length < 2 || nombres.length > 120 || (!empresa && (apellidos.length < 2 || apellidos.length > 80))) return fail(empresa ? 'Completa la razón social (de 2 a 120 caracteres).' : 'Completa nombres y apellidos.');
+    const direccion = input.direccion?.trim() ?? '';
+    if (!direccion || direccion.length > 300) return fail('Completa la dirección (máximo 300 caracteres).');
+    const telefonoConocido = input.telefonoConocido?.replace(/[\s()-]/g, '') ?? '';
+    if (telefonoConocido && !/^\+?[0-9]{7,15}$/.test(telefonoConocido)) return fail('Revisa el teléfono del conocido: utiliza de 7 a 15 dígitos.');
+    const telefono = input.telefono.replace(/[\s()-]/g, '');
+    if (!/^\+?[0-9]{10,15}$/.test(telefono)) return fail('Ingresa un teléfono de 10 a 15 dígitos, con prefijo internacional opcional.');
+    const cliente: Cliente = { cedula, nombres, apellidos: empresa ? '' : apellidos, telefono, direccion, telefonoConocido };
+    d.clientes.push(cliente);
+    return { ok: true, cliente };
+  });
+}
+
+function errorCodigoBarras(d: StoreState, barras: string, codigo: string): string | null {
+  if (barras && !/^[0-9]{8,14}$/.test(barras)) return 'El código de barras debe tener de 8 a 14 dígitos.';
+  if (d.productos.some((p) => p.codigo !== codigo && ((barras && (p.codigoBarras === barras || p.codigo === barras)) || p.codigoBarras === codigo))) return 'Ese código ya identifica otro producto.';
+  return null;
+}
+
 /* ---------- Catálogo (F04, F05, F06) ---------- */
 export interface NuevoProducto {
   /** Opcional: si se omite, se genera automáticamente según la categoría (L-001, B-002…). */
-  codigo?: string; nombre: string; categoria: string; unidadMedida: string; precioGlobal: number | string; activo?: boolean;
+  codigo?: string; nombre: string; categoria: string; unidadMedida: string; precioGlobal: number | string; activo?: boolean; codigoBarras?: string;
 }
 export function crearProducto(input: NuevoProducto): Result<{ codigo: string }> {
   const manual = input.codigo?.trim().toUpperCase();
   const nombre = input.nombre.trim();
+  const codigoBarras = input.codigoBarras?.trim() ?? '';
   const precio = Number(input.precioGlobal);
   return mutate((d) => {
     const codigo = manual || siguienteCodigo(d.productos, input.categoria);
     if (!/^[A-Z0-9-]{2,16}$/.test(codigo)) return fail('El código debe tener de 2 a 16 caracteres (letras, números o guiones).');
     if (d.productos.some((p) => p.codigo === codigo)) return fail(`Ya existe un producto con el código ${codigo}.`);
+    const errorBarras = errorCodigoBarras(d, codigoBarras, codigo);
+    if (errorBarras) return fail(errorBarras);
     if (nombre.length < 2) return fail('Escribe el nombre del producto.');
     if (!input.categoria) return fail('Elige una categoría.');
     if (!input.unidadMedida) return fail('Elige la unidad de medida.');
     if (input.precioGlobal === '' || !Number.isFinite(precio) || precio < 0) return fail('El precio debe ser un número mayor o igual a 0.');
-    d.productos.push({ codigo, nombre, categoria: input.categoria, unidadMedida: input.unidadMedida, precioGlobal: Math.round(precio * 100) / 100, activo: input.activo ?? true });
+    d.productos.push({ codigo, codigoBarras, nombre, categoria: input.categoria, unidadMedida: input.unidadMedida, precioGlobal: Math.round(precio * 100) / 100, activo: input.activo ?? true });
     d.sedes.forEach((sede) => d.existencias.push({ sedeId: sede.id, productoCodigo: codigo, cantidad: 0, stockMinimo: 5, habilitado: false }));
     return { ok: true, codigo };
   });
 }
 
-export function actualizarProducto(codigo: string, cambios: { nombre: string; categoria: string; unidadMedida: string; activo?: boolean }): Result {
+export function actualizarProducto(codigo: string, cambios: { nombre: string; categoria: string; unidadMedida: string; activo?: boolean; codigoBarras?: string }): Result {
   return mutate((d) => {
     const p = d.productos.find((x) => x.codigo === codigo);
     if (!p) return fail('El producto no existe.');
     const nombre = cambios.nombre.trim();
+    const codigoBarras = cambios.codigoBarras?.trim() ?? p.codigoBarras ?? '';
+    const errorBarras = errorCodigoBarras(d, codigoBarras, codigo);
+    if (errorBarras) return fail(errorBarras);
     if (nombre.length < 2) return fail('Escribe el nombre del producto.');
     if (!cambios.categoria || !cambios.unidadMedida) return fail('Completa categoría y unidad de medida.');
-    Object.assign(p, { nombre, categoria: cambios.categoria, unidadMedida: cambios.unidadMedida });
+    Object.assign(p, { nombre, codigoBarras, categoria: cambios.categoria, unidadMedida: cambios.unidadMedida });
     if (cambios.activo !== undefined) p.activo = cambios.activo;
     return { ok: true };
   });
@@ -385,10 +428,10 @@ export function registrarEntrada(sedeId: string, codigo: string, cantidad: numbe
     const p = d.productos.find((x) => x.codigo === codigo);
     if (!e || !e.habilitado || !p) return fail('Ese producto no está habilitado en la sede.');
     if (!p.activo) return fail('El producto está inactivo.');
-    if (cantidad === '' || !Number.isInteger(n) || n <= 0) return fail('La cantidad debe ser un número entero mayor a 0.');
+    if (cantidad === '' || !cantidadValida(p, n)) return fail(p.unidadMedida === 'kg' ? 'Ingresa un peso positivo con hasta 3 decimales.' : 'La cantidad debe ser un número entero mayor a 0.');
     if (n > 100000) return fail('La cantidad es demasiado grande.');
     const anterior = e.cantidad;
-    e.cantidad += n;
+    e.cantidad = redondearCantidad(e.cantidad + n);
     d.movimientos.push({ id: `M-${d.seq++}`, sedeId, productoCodigo: codigo, fecha: new Date().toISOString(), tipo: 'ENTRADA', cantidad: n, motivo: motivo.trim() || 'Ingreso de mercancía' });
     return { ok: true, anterior, nueva: e.cantidad };
   });
@@ -411,9 +454,10 @@ function aplicarSalida(d: StoreState, sedeId: string, codigo: string, cantidad: 
   if (!d.sedes.some((s) => s.id === sedeId && s.activa)) return 'La sede está inactiva o no existe.';
   const e = findEx(d, sedeId, codigo);
   if (!e || !e.habilitado) return 'Ese producto no está habilitado en la sede.';
-  if (!Number.isInteger(cantidad) || cantidad <= 0) return 'Cantidad inválida.';
+  const producto = d.productos.find((p) => p.codigo === codigo);
+  if (!producto?.activo || !cantidadValida(producto, cantidad)) return 'Cantidad inválida o producto inactivo.';
   if (cantidad > e.cantidad) return `Stock insuficiente de ${d.productos.find((p) => p.codigo === codigo)?.nombre ?? codigo}: quedan ${e.cantidad}.`;
-  e.cantidad -= cantidad;
+  e.cantidad = redondearCantidad(e.cantidad - cantidad);
   d.movimientos.push({ id: `M-${d.seq++}`, sedeId, productoCodigo: codigo, fecha: new Date().toISOString(), tipo: 'SALIDA', cantidad, motivo });
   return null;
 }
@@ -429,23 +473,26 @@ export function descontarStock(sedeId: string, codigo: string, cantidad: number,
 export interface LineaVenta { codigo: string; cantidad: number }
 /** Confirma una venta: valida todo el carrito, descuenta cada ítem y guarda la venta (todo o nada). */
 export function registrarVenta(
-  sedeId: string, lineas: LineaVenta[], metodo: MetodoPago, cajero: string, recibido?: number,
+  sedeId: string, lineas: LineaVenta[], metodo: MetodoPago, cajero: string, recibido?: number, cedulaCliente?: string,
 ): Result<{ venta: Venta }> {
   return mutate((d) => {
     if (!lineas.length) return fail('El carrito está vacío.');
+    const cliente = cedulaCliente ? buscarCliente(d, cedulaCliente) : undefined;
+    if (cedulaCliente && !cliente) return fail('El cliente no está registrado.');
+    if (!['efectivo', 'tarjeta', 'transferencia'].includes(metodo)) return fail('Método de pago inválido.');
     const items: VentaItem[] = [];
     for (const l of lineas) {
       const p = d.productos.find((x) => x.codigo === l.codigo);
       if (!p?.activo) return fail('Hay un producto inactivo en el carrito.');
       items.push({ codigo: p.codigo, nombre: p.nombre, unidadMedida: p.unidadMedida, cantidad: l.cantidad, precio: p.precioGlobal });
     }
-    const total = Math.round(items.reduce((t, it) => t + it.cantidad * it.precio, 0) * 100) / 100;
-    if (metodo === 'efectivo' && (recibido === undefined || recibido < total)) return fail('El efectivo recibido no cubre el total.');
+    const total = Math.round(items.reduce((t, it) => t + importeLinea(it.precio, it.cantidad), 0) * 100) / 100;
+    if (metodo === 'efectivo' && (recibido === undefined || !Number.isFinite(recibido) || recibido < total)) return fail('El efectivo recibido no cubre el total.');
     for (const it of items) {
       const error = aplicarSalida(d, sedeId, it.codigo, it.cantidad, 'Venta POS / Caja');
       if (error) return fail(error);
     }
-    const venta: Venta = { id: `V-${d.seq++}`, sedeId, fecha: new Date().toISOString(), items, total, metodo, cajero, ...(metodo === 'efectivo' ? { recibido } : {}) };
+    const venta: Venta = { id: `V-${d.seq++}`, sedeId, fecha: new Date().toISOString(), items, total, metodo, cajero, ...(cliente ? { cliente: { ...cliente } } : {}), ...(metodo === 'efectivo' ? { recibido } : {}) };
     d.ventas.push(venta);
     return { ok: true, venta };
   });

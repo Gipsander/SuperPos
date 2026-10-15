@@ -41,7 +41,7 @@ Si en Windows aparece una ventana que pregunta con qué abrir un archivo `.ps1`,
 | `npm run dev` | **Sí, es el de uso diario** | Enciende la app local para probarla. Recarga sola al guardar cambios. |
 | `npm run build` | **No** para probar en local | Solo para **publicar en línea**: genera la carpeta `out/` con la versión final y de paso revisa errores. No hace falta correrlo para ver ni usar la app. |
 | `npm run typecheck` | **No** (opcional) | Revisa errores de TypeScript sin encender nada. Útil antes de un commit, no para usar la app. |
-| `npm test` | **No** (opcional) | Ejecuta seis pruebas de administración, permisos, persistencia e integración con inventario y caja. |
+| `npm test` | **No** (opcional) | Ejecuta pruebas de administración, clientes, códigos de barras, venta por peso, permisos y persistencia. |
 | `npm start` | **No** | Sirve la carpeta `out/` después de un `build`. Quedó de apoyo y **no está limitado a tu máquina**; no lo uses salvo que sepas por qué. |
 
 ### Comandos que NO debes ejecutar sin necesidad
@@ -82,7 +82,7 @@ Regla de alerta: **agotado** si `cantidad = 0`; **stock bajo** si `cantidad < st
 
 - **Encargado de inventario:** solo su sede asignada; consulta stock y faltantes, registra entradas y configura mínimos; ve catálogo y precios en solo lectura.
 - **Administrador:** todas las sedes; además gestiona catálogo, sedes habilitadas y precio global, y accede a reportes (incluye el ranking de cajeros por ingresos generados). **No** incluye la vista de caja: el punto de venta es exclusivo del cajero.
-- **Cajero:** solo el punto de venta de su sede, mostrada como dato fijo sin desplegable. El catálogo no muestra los productos agotados y se ordena alfabéticamente.
+- **Cajero:** solo el punto de venta de su sede, mostrada como dato fijo sin desplegable. La caja prioriza códigos y detalle de venta. La búsqueda manual se abre en un diálogo auxiliar.
 
 ## Estado de los módulos
 
@@ -102,3 +102,26 @@ Las sedes nuevas empiezan con stock cero y sin productos habilitados. Los datos 
 ## Publicación
 
 La exportación estática (`out/`) se puede publicar en GitHub Pages con una acción de GitHub. Para servirla bajo `/SuperPos` compile con `NEXT_PUBLIC_BASE_PATH=/SuperPos npm run build`. Cada navegador tiene su propia sesión y datos: GitHub comparte archivos, no operaciones.
+
+## Caja para supermercado (octubre 2026)
+
+- Área principal: detalle de venta con código, descripción, precio, cantidad editable e importe. Resumen de cobro lateral en escritorio.
+- F2 enfoca la entrada de códigos. Código + Enter selecciona el producto y pasa al campo Cantidad, con 1 seleccionado. Escribir la cantidad + Enter agrega todas las unidades y devuelve el foco al código vacío. Otro Enter acepta una unidad. Escape cancela la selección pendiente sin agregarla. El lector debe actuar como teclado y terminar con Enter.
+- F3 abre la búsqueda auxiliar por nombre o código; no hay catálogo permanente en la caja. Productos inactivos o no habilitados para la sede no se venden; el stock se valida de nuevo al cobrar.
+- Documento: selector V- predeterminado, E- para extranjero y J-/G- para RIF. Pulsa Consultar o Enter. Admite números cortos o largos sin exigir una longitud fija; conserva precisión y los ceros iniciales del RIF. Si existe, muestra el nombre; si no, abre el registro con documento editable, nombres y apellidos (razón social para J/G), teléfono, dirección y teléfono opcional de un conocido. La validación es de formato, no verifica identidad ni validez fiscal ante un organismo. Los clientes antiguos siguen disponibles aunque no tengan los nuevos campos.
+- El cliente se guarda en el mismo almacenamiento local del prototipo y queda disponible para las cajas de ese navegador. No se duplican cédulas. Cambiar la cédula invalida la selección anterior.
+- El cobro requiere cliente identificado. F8 abre el cobro; el recibo guarda una copia del cliente asociado. Nueva venta limpia la selección, conservando el registro del cliente.
+- Administración → Catálogo permite registrar o editar un código de barras opcional, único, de 8 a 14 dígitos. No se inventan códigos comerciales para los productos de demostración: se pueden usar sus códigos internos, por ejemplo L-004.
+- Productos con unidad kg utilizan el mismo flujo, con el campo Peso (kg) vacío para ingresar el peso manual de balanza (hasta 3 decimales). Inventario admite ingresos fraccionarios para kg. Las demás unidades siguen siendo enteras. No hay integración automática con balanzas ni decodificación de etiquetas de peso variable.
+- Cancelar venta o cambiar sede con una venta en curso requiere confirmar antes de descartar. Cobro, inventario y recibo utilizan el mismo redondeo por línea a centavos.
+- Se migran datos anteriores agregando clientes vacíos; se conservan inventario, cuentas y ventas históricas. El prototipo sigue usando localStorage, sin sincronización entre equipos ni backend de producción.
+
+### Referencias de diseño
+
+Son patrones de operación documentados, no una certificación ni un único estándar obligatorio de interfaz:
+
+- [Shopify POS: lectores de códigos](https://help.shopify.com/en/manual/sell-in-person/hardware/barcode-scanners): agregar productos rápidamente al carrito mediante escaneo.
+- [Shopify POS: búsqueda de productos](https://help.shopify.com/en/manual/sell-in-person/shopify-pos/inventory-management/searching-for-products): búsqueda como vía alternativa para encontrar y agregar productos.
+- [Odoo POS: códigos de barras](https://www.odoo.com/documentation/17.0/applications/sales/point_of_sale/shop/barcode.html): escaneo para acelerar la atención en caja.
+
+La identificación por cédula y sus campos se implementan según el requisito de este proyecto.

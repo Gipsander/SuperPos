@@ -13,6 +13,7 @@ export interface Sede {
 /** El producto no se duplica por sede: un único precio global. */
 export interface Producto {
   codigo: string;
+  codigoBarras?: string;
   nombre: string;
   categoria: string;
   unidadMedida: string;
@@ -53,6 +54,15 @@ export interface CambioPrecio {
 
 export type MetodoPago = 'efectivo' | 'tarjeta' | 'transferencia';
 
+export interface Cliente {
+  direccion?: string;
+  telefonoConocido?: string;
+  cedula: string;
+  nombres: string;
+  apellidos: string;
+  telefono: string;
+}
+
 export interface VentaItem {
   codigo: string;
   nombre: string;
@@ -62,6 +72,7 @@ export interface VentaItem {
 }
 
 export interface Venta {
+  cliente?: Cliente;
   id: string;
   sedeId: string;
   fecha: string;
@@ -73,6 +84,7 @@ export interface Venta {
 }
 
 export interface StoreState {
+  clientes: Cliente[];
   usuarios: CuentaDemo[];
   sedes: Sede[];
   productos: Producto[];
