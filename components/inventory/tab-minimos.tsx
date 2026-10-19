@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useMemo, useState } from 'react';
 import type { FilaStock } from '@/lib/types';
 import { getStock, setStockMinimo, useStore } from '@/lib/store';
@@ -9,7 +10,7 @@ import { EmptyState, Sub, TableWrap, numCls, tdCls, thCls } from '@/components/u
 import { useToast } from '@/components/ui/toast';
 import { coincide } from './tab-stock';
 
-/** F13 · Configurar mínimos: las alertas de reposición se actualizan al instante. */
+/** F13 — Configurar mínimos: las alertas de reposición se actualizan al instante. */
 export function TabMinimos({ sedeId }: { sedeId: string }) {
   const state = useStore();
   const rows = useMemo(() => getStock(state, sedeId), [state, sedeId]);
@@ -22,7 +23,7 @@ export function TabMinimos({ sedeId }: { sedeId: string }) {
     <>
       <p className="mb-3.5 text-muted">Define a partir de qué cantidad un producto debe reponerse en esta sede. Las alertas se actualizan al instante.</p>
       <Toolbar>
-        <SearchBox value={q} onChange={setQ} />
+        <SearchBox value={q} onChange={setQ} placeholder="Buscar por nombre o código" />
         <CategorySelect value={cat} onChange={setCat} options={categorias} />
       </Toolbar>
       <TableWrap caption="Stock mínimo por producto en la sede seleccionada" minWidth={600}>
@@ -55,7 +56,10 @@ function MinRow({ row, sedeId }: { row: FilaStock; sedeId: string }) {
   }
   return (
     <tr className="group hover:bg-[#f8fbfe]">
-      <th scope="row" className={cx(tdCls, 'text-left font-normal')}><strong className="text-strong">{row.producto.nombre}</strong><Sub>{row.productoCodigo}</Sub></th>
+      <th scope="row" className={cx(tdCls, 'text-left font-normal')}>
+        <strong className="text-strong">{row.producto.nombre}</strong>
+        <Sub>{row.productoCodigo}{row.producto.codigoBarras ? ` · Barras: ${row.producto.codigoBarras}` : ''}</Sub>
+      </th>
       <td className={cx(tdCls, numCls)}><strong className="text-strong">{num(row.cantidad)}</strong> <span className="text-xs text-muted">{row.producto.unidadMedida}</span></td>
       <td className={cx(tdCls, numCls)}>
         <label className="sr-only" htmlFor={`min-${sedeId}-${row.productoCodigo}`}>Stock mínimo de {row.producto.nombre}</label>

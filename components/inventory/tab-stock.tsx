@@ -1,8 +1,10 @@
 'use client';
+
 import { useEffect, useMemo, useState } from 'react';
 import { Download, PackageSearch } from 'lucide-react';
 import type { EstadoStock, FilaStock } from '@/lib/types';
 import { getExistencia, getProducto, getSede, getStock, registrarEntrada, faltan, useStore } from '@/lib/store';
+import { coincideCodigoBarras } from '@/lib/pos';
 import { cx, money, norm, num } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Falta, StockBadge } from '@/components/ui/badge';
@@ -18,10 +20,10 @@ export function coincide(r: FilaStock, q: string, cat: string) {
   if (cat && r.producto.categoria !== cat) return false;
   if (!q) return true;
   const t = norm(q);
-  return norm(r.producto.nombre).includes(t) || norm(r.productoCodigo).includes(t);
+  return norm(r.producto.nombre).includes(t) || norm(r.productoCodigo).includes(t) || coincideCodigoBarras(r.producto.codigoBarras, q);
 }
 
-/** F11 · Consultar stock y faltantes por sede. */
+/** F11 — Consultar stock y faltantes por sede. */
 export function TabStock({ sedeId }: { sedeId: string }) {
   const state = useStore();
   const rows = useMemo(() => getStock(state, sedeId), [state, sedeId]);
@@ -42,6 +44,7 @@ export function TabStock({ sedeId }: { sedeId: string }) {
     rows.forEach((r) => { c[r.estado]++; c.reponer += r.faltan; });
     return c;
   }, [rows]);
+
   const categorias = useMemo(() => [...new Set(rows.map((r) => r.producto.categoria))].sort(), [rows]);
   const list = useMemo(() => rows
     .filter((r) => coincide(r, q, cat) && (filtro === 'todos' || r.estado === filtro))
@@ -56,16 +59,19 @@ export function TabStock({ sedeId }: { sedeId: string }) {
         <StatCard label="Con stock bajo" value={num(n.bajo)} tone="warn" />
         <StatCard label="Unidades por reponer" value={num(n.reponer)} />
       </div>
+
       <Toolbar>
-        <SearchBox value={q} onChange={setQ} />
+        <SearchBox value={q} onChange={setQ} placeholder="Buscar por nombre o código" />
         <CategorySelect value={cat} onChange={setCat} options={categorias} />
       </Toolbar>
+
       <div role="group" aria-label="Filtrar por estado" className="mb-3.5 flex flex-wrap gap-2">
         <Chip active={filtro === 'todos'} count={n.todos} onClick={() => setFiltro('todos')}>Todos</Chip>
         <Chip active={filtro === 'agotado'} count={n.agotado} onClick={() => setFiltro('agotado')}>Agotados</Chip>
         <Chip active={filtro === 'bajo'} count={n.bajo} onClick={() => setFiltro('bajo')}>Stock bajo</Chip>
         <Chip active={filtro === 'ok'} count={n.ok} onClick={() => setFiltro('ok')}>Disponibles</Chip>
       </div>
+
       <TableWrap caption="Existencias de la sede seleccionada">
         <thead>
           <tr>
@@ -87,7 +93,8 @@ export function TabStock({ sedeId }: { sedeId: string }) {
           {list.map((r) => (
             <tr key={r.productoCodigo} className={cx('group hover:bg-[#f8fbfe]', flash === r.productoCodigo && 'animate-flash')}>
               <th scope="row" className={cx(tdCls, 'text-left font-normal')}>
-                <strong className="text-strong">{r.producto.nombre}</strong><Sub>{r.productoCodigo}</Sub>
+                <strong className="text-strong">{r.producto.nombre}</strong>
+                <Sub>{r.productoCodigo}{r.producto.codigoBarras ? ` · Barras: ${r.producto.codigoBarras}` : ''}</Sub>
               </th>
               <td className={tdCls}>{r.producto.categoria}</td>
               <td className={cx(tdCls, numCls)}>{money(r.producto.precioGlobal)}</td>

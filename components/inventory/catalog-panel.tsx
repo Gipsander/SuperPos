@@ -1,4 +1,5 @@
 'use client';
+
 import { useMemo, useState } from 'react';
 import { Pencil, Plus, SearchX } from 'lucide-react';
 import type { Producto, User } from '@/lib/types';
@@ -6,6 +7,7 @@ import {
   CATEGORIAS, UNIDADES, actualizarProducto, crearProducto, getExistencia, getProducto, getSede, habilitarEnSede,
   sedesDeUsuario, sedesHabilitadas, setActivo, siguienteCodigo, useStore,
 } from '@/lib/store';
+import { coincideCodigoBarras } from '@/lib/pos';
 import { cx, money, norm } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Tag } from '@/components/ui/badge';
@@ -17,10 +19,7 @@ import { useToast } from '@/components/ui/toast';
 type Vista = 'lista' | 'sedes';
 type EstadoFiltro = 'todos' | 'activo' | 'inactivo';
 
-/**
- * Módulo 2 · Catálogo de productos (F04 registrar, F05 actualizar, F06 habilitar por sede).
- * Solo el administrador edita; cualquier otro rol lo consulta en modo lectura.
- */
+
 export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: User; embedded?: boolean; initialSedeId?: string }) {
   const state = useStore();
   const toast = useToast();
@@ -38,7 +37,7 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
   const list = useMemo(() => state.productos.filter((p) =>
     (!cat || p.categoria === cat) &&
     (estado === 'todos' || (estado === 'activo') === p.activo) &&
-    (!q || norm(p.nombre).includes(norm(q)) || norm(p.codigo).includes(norm(q)) || (p.codigoBarras ?? '').includes(q.trim())),
+    (!q || norm(p.nombre).includes(norm(q)) || norm(p.codigo).includes(norm(q)) || coincideCodigoBarras(p.codigoBarras, q)),
   ).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')), [state.productos, q, cat, estado]);
 
   function toggleSede(sedeId: string, codigo: string, habilitar: boolean) {
@@ -61,6 +60,7 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
         description={isAdmin ? 'Un solo catálogo para toda la cadena. Cada producto tiene un único precio global.' : 'Consulta los productos y su precio global. Solo el administrador puede modificarlos.'}
         actions={isAdmin && <Button variant="primary" onClick={() => setForm({ codigo: null })}><Plus aria-hidden="true" />Nuevo producto</Button>}
       />
+
       {isAdmin ? (
         <div role="group" aria-label="Vista del catálogo" className="mb-3.5 inline-flex rounded-xl border border-line bg-soft p-[3px]">
           {([['lista', 'Productos'], ['sedes', 'Disponibilidad por sede']] as const).map(([id, label]) => (
@@ -71,8 +71,9 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
       ) : (
         <p className="mb-4 rounded-xl border border-line bg-soft px-3.5 py-2.5 text-muted">Solo lectura: el catálogo y los precios los gestiona el administrador.</p>
       )}
+
       <Toolbar>
-        <SearchBox value={q} onChange={setQ} />
+        <SearchBox value={q} onChange={setQ} placeholder="Buscar por nombre o código" />
         <CategorySelect value={cat} onChange={setCat} options={CATEGORIAS} />
         <div>
           <label htmlFor="cat-estado" className="sr-only">Estado</label>
@@ -81,6 +82,7 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
           </Select>
         </div>
       </Toolbar>
+
       {isAdmin && vista === 'sedes' && <div className="mb-4 max-w-sm"><Field label="Sede del catálogo">{(id) => <Select id={id} value={sedeScope} onChange={(e) => setSedeScope(e.target.value)}><option value="">Todas las sedes activas</option>{disponibles.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}</Select>}</Field></div>}
 
       {vista === 'lista' ? (
@@ -129,7 +131,7 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
               {list.length === 0 && <tr><td colSpan={sedes.length + 1}><EmptyState title="Sin resultados" icon={SearchX}>No hay productos que coincidan.</EmptyState></td></tr>}
               {list.map((p) => (
                 <tr key={p.codigo} className="group hover:bg-[#f8fbfe]">
-                  <th scope="row" className={cx(tdCls, 'text-left font-normal')}><strong className="text-strong">{p.nombre}</strong><Sub>{p.codigo}{p.activo ? '' : ' · inactivo'}</Sub></th>
+                  <th scope="row" className={cx(tdCls, 'text-left font-normal')}><strong className="text-strong">{p.nombre}</strong><Sub>{p.codigo}{p.codigoBarras ? ` · Barras: ${p.codigoBarras}` : ''}{p.activo ? '' : ' · inactivo'}</Sub></th>
                   {sedes.map((s) => (
                     <td key={s.id} className={cx(tdCls, 'text-center')}>
                       <input type="checkbox" className="size-[22px] cursor-pointer accent-brand" checked={!!getExistencia(state, s.id, p.codigo)?.habilitado}
@@ -187,7 +189,20 @@ function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () =
     <Modal title={editando ? 'Editar producto' : 'Nuevo producto'} onClose={onClose}>
       <form onSubmit={submit} noValidate className="flex flex-col gap-3.5">
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-          <Field label="Código de barras" hint="Opcional. Escanea la etiqueta del producto; debe ser único.">{(id, desc) => <Input id={id} aria-describedby={desc} value={f.codigoBarras} inputMode="numeric" maxLength={14} autoComplete="off" onChange={(e) => set('codigoBarras', e.target.value)} />}</Field>
+          <Field label="Código de barras" hint="Opcional. Exactamente 8 dígitos numéricos; debe ser único.">
+            {(id, desc) => (
+              <Input
+                id={id}
+                aria-describedby={desc}
+                value={f.codigoBarras}
+                inputMode="numeric"
+                maxLength={8}
+                placeholder="Ej. 75908143"
+                autoComplete="off"
+                onChange={(e) => set('codigoBarras', e.target.value.replace(/\D/g, '').slice(0, 8))}
+              />
+            )}
+          </Field>
           <Field label="Nombre">{(id) => <Input id={id} value={f.nombre} maxLength={60} autoComplete="off" onChange={(e) => set('nombre', e.target.value)} />}</Field>
           <Field label="Categoría">
             {(id) => (

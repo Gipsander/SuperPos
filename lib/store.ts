@@ -37,36 +37,36 @@ export function siguienteCodigo(productos: Pick<Producto, 'codigo'>[], categoria
 
 export const UNIDADES = ['unidad', 'kg', 'litro', 'paquete', 'caja', 'botella'];
 
-const SEED_PRODUCTOS: [string, string, string, string, number][] = [
-  ['L-001', 'Leche entera 1 L', 'Lácteos', 'litro', 1.35],
-  ['L-002', 'Queso blanco', 'Lácteos', 'kg', 6.8],
-  ['L-003', 'Yogur natural 1 kg', 'Lácteos', 'unidad', 2.9],
-  ['L-004', 'Mantequilla 250 g', 'Lácteos', 'unidad', 2.2],
-  ['P-001', 'Pan campesino', 'Panadería', 'unidad', 1.1],
-  ['P-002', 'Pan de sandwich', 'Panadería', 'paquete', 2.4],
-  ['B-001', 'Agua mineral 5 L', 'Bebidas', 'botella', 1.9],
-  ['B-002', 'Refresco cola 2 L', 'Bebidas', 'botella', 2.1],
-  ['B-003', 'Jugo de naranja 1 L', 'Bebidas', 'litro', 2.6],
-  ['A-001', 'Arroz blanco 1 kg', 'Despensa', 'paquete', 1.45],
-  ['A-002', 'Harina de maíz 1 kg', 'Despensa', 'paquete', 1.6],
-  ['A-003', 'Pasta larga 500 g', 'Despensa', 'paquete', 1.25],
-  ['A-004', 'Aceite vegetal 1 L', 'Despensa', 'botella', 3.3],
-  ['A-005', 'Azúcar 1 kg', 'Despensa', 'paquete', 1.55],
-  ['A-006', 'Café molido 250 g', 'Despensa', 'paquete', 3.9],
-  ['F-001', 'Tomate', 'Frutas y verduras', 'kg', 2.3],
-  ['F-002', 'Cebolla', 'Frutas y verduras', 'kg', 1.7],
-  ['F-003', 'Plátano', 'Frutas y verduras', 'kg', 1.4],
-  ['R-001', 'Pechuga de pollo', 'Carnes', 'kg', 5.2],
-  ['R-002', 'Carne molida', 'Carnes', 'kg', 7.4],
-  ['M-001', 'Detergente líquido 2 L', 'Limpieza', 'botella', 6.5],
-  ['M-002', 'Papel higiénico x4', 'Limpieza', 'paquete', 3.1],
-  ['C-001', 'Jabón de baño', 'Cuidado personal', 'unidad', 1.05],
-  ['C-002', 'Shampoo 400 ml', 'Cuidado personal', 'botella', 4.6],
+const SEED_PRODUCTOS: [string, string, string, string, number, string][] = [
+  ['L-001', 'Leche entera 1 L', 'Lácteos', 'litro', 1.35, '75901012'],
+  ['L-002', 'Queso blanco', 'Lácteos', 'kg', 6.8, '75901029'],
+  ['L-003', 'Yogur natural 1 kg', 'Lácteos', 'unidad', 2.9, '75901036'],
+  ['L-004', 'Mantequilla 250 g', 'Lácteos', 'unidad', 2.2, '75901043'],
+  ['P-001', 'Pan campesino', 'Panadería', 'unidad', 1.1, '75908143'],
+  ['P-002', 'Pan de sandwich', 'Panadería', 'paquete', 2.4, '75902026'],
+  ['B-001', 'Agua mineral 5 L', 'Bebidas', 'botella', 1.9, '75903016'],
+  ['B-002', 'Refresco cola 2 L', 'Bebidas', 'botella', 2.1, '75903023'],
+  ['B-003', 'Jugo de naranja 1 L', 'Bebidas', 'litro', 2.6, '75903030'],
+  ['A-001', 'Arroz blanco 1 kg', 'Despensa', 'paquete', 1.45, '75904013'],
+  ['A-002', 'Harina de maíz 1 kg', 'Despensa', 'paquete', 1.6, '75904020'],
+  ['A-003', 'Pasta larga 500 g', 'Despensa', 'paquete', 1.25, '75904037'],
+  ['A-004', 'Aceite vegetal 1 L', 'Despensa', 'botella', 3.3, '75904044'],
+  ['A-005', 'Azúcar 1 kg', 'Despensa', 'paquete', 1.55, '75904051'],
+  ['A-006', 'Café molido 250 g', 'Despensa', 'paquete', 3.9, '75904068'],
+  ['F-001', 'Tomate', 'Frutas y verduras', 'kg', 2.3, '75905010'],
+  ['F-002', 'Cebolla', 'Frutas y verduras', 'kg', 1.7, '75905027'],
+  ['F-003', 'Plátano', 'Frutas y verduras', 'kg', 1.4, '75905034'],
+  ['R-001', 'Pechuga de pollo', 'Carnes', 'kg', 5.2, '75906017'],
+  ['R-002', 'Carne molida', 'Carnes', 'kg', 7.4, '75906024'],
+  ['M-001', 'Detergente líquido 2 L', 'Limpieza', 'botella', 6.5, '75907014'],
+  ['M-002', 'Papel higiénico x4', 'Limpieza', 'paquete', 3.1, '75907021'],
+  ['C-001', 'Jabón de baño', 'Cuidado personal', 'unidad', 1.05, '75909018'],
+  ['C-002', 'Shampoo 400 ml', 'Cuidado personal', 'botella', 4.6, '75909025'],
 ];
 
 function seed(): StoreState {
-  const productos: Producto[] = SEED_PRODUCTOS.map(([codigo, nombre, categoria, unidadMedida, precioGlobal]) =>
-    ({ codigo, nombre, categoria, unidadMedida, precioGlobal, activo: true }));
+  const productos: Producto[] = SEED_PRODUCTOS.map(([codigo, nombre, categoria, unidadMedida, precioGlobal, codigoBarras]) =>
+    ({ codigo, codigoBarras, nombre, categoria, unidadMedida, precioGlobal, activo: true }));
   productos[23].activo = false; // ejemplo de producto inactivo
 
   const existencias: Existencia[] = [];
@@ -87,31 +87,39 @@ function seed(): StoreState {
     });
   });
 
-  // Historial de ventas de los últimos 7 días (determinista) para que el panel tenga datos desde el inicio.
   let r = 7;
   const rnd = () => (r = (r * 1103515245 + 12345) % 2147483648) / 2147483648;
   const ventas: Venta[] = [];
   const metodos: MetodoPago[] = ['efectivo', 'tarjeta', 'transferencia'];
   let n = 1000;
-  for (let d = 6; d >= 0; d--) {
-    for (const sede of SEDES) {
+
+  for (let d = 6; d >= 0; d--) 
+    {
+    for (const sede of SEDES) 
+      {
       const disponibles = existencias.filter((e) => e.sedeId === sede.id && e.habilitado && productos.find((p) => p.codigo === e.productoCodigo)?.activo);
       const cuantas = 1 + Math.floor(rnd() * (sede.id === 's1' ? 4 : 3));
-      for (let v = 0; v < cuantas; v++) {
+
+      for (let v = 0; v < cuantas; v++) 
+        {
         const items: VentaItem[] = [];
         const lineas = 1 + Math.floor(rnd() * 3);
-        for (let l = 0; l < lineas; l++) {
+        for (let l = 0; l < lineas; l++) 
+          {
           const elegido = disponibles[Math.floor(rnd() * disponibles.length)];
           const p = productos.find((x) => x.codigo === elegido.productoCodigo)!;
           if (items.some((it) => it.codigo === p.codigo)) continue;
           items.push({ codigo: p.codigo, nombre: p.nombre, unidadMedida: p.unidadMedida, cantidad: 1 + Math.floor(rnd() * 4), precio: p.precioGlobal });
-        }
+          }
+
         const fecha = new Date(base - d * 86400e3 - (1 + Math.floor(rnd() * 9)) * 3600e3).toISOString();
         const id = `V-${++n}`;
+
         ventas.push({
           id, sedeId: sede.id, fecha, items, metodo: metodos[Math.floor(rnd() * 3)], cajero: 'Luis',
           total: Math.round(items.reduce((t, it) => t + importeLinea(it.precio, it.cantidad), 0) * 100) / 100,
         });
+
         items.forEach((it, k) => movimientos.push({
           id: `M-${id}-${k}`, sedeId: sede.id, productoCodigo: it.codigo, fecha, tipo: 'SALIDA', cantidad: it.cantidad, motivo: 'Venta POS / Caja',
         }));
@@ -148,7 +156,6 @@ function load(): StoreState {
     if (raw) {
       const data = JSON.parse(raw) as StoreState;
       if (data && Array.isArray(data.sedes) && Array.isArray(data.productos) && Array.isArray(data.existencias) && Array.isArray(data.ventas)) {
-        // Amplía el estado v2 sin borrar el inventario ni las ventas guardadas.
         data.sedes = data.sedes.map((s) => {
           const base = SEDES.find((item) => item.id === s.id);
           return { ...s, codigo: s.codigo ?? base?.codigo ?? s.id.toUpperCase(),
@@ -158,6 +165,16 @@ function load(): StoreState {
         data.clientes ??= [];
         data.usuarios ??= structuredClone(USUARIOS_DEMO);
         migrarCodigosLegacy(data);
+        // Asigna los códigos de barras de 8 dígitos a los 24 productos iniciales si aún no tenían uno guardado
+        const barrasSeed = new Map(SEED_PRODUCTOS.map(([codigo, , , , , barras]) => [codigo, barras]));
+        data.productos.forEach((p) => {
+          if (p.codigoBarras === undefined) {
+            const sugerido = barrasSeed.get(p.codigo);
+            if (sugerido && !data.productos.some((otro) => otro !== p && otro.codigoBarras === sugerido)) {
+              p.codigoBarras = sugerido;
+            }
+          }
+        });
         return data;
       }
     }
@@ -337,7 +354,7 @@ export function registrarCliente(actor: User, input: Cliente): Result<{ cliente:
 }
 
 function errorCodigoBarras(d: StoreState, barras: string, codigo: string): string | null {
-  if (barras && !/^[0-9]{8,14}$/.test(barras)) return 'El código de barras debe tener de 8 a 14 dígitos.';
+  if (barras && !/^[0-9]{8}$/.test(barras)) return 'El código de barras debe tener exactamente 8 dígitos.';
   if (d.productos.some((p) => p.codigo !== codigo && ((barras && (p.codigoBarras === barras || p.codigo === barras)) || p.codigoBarras === codigo))) return 'Ese código ya identifica otro producto.';
   return null;
 }

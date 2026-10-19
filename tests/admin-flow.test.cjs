@@ -181,14 +181,15 @@ test('venta inválida no descuenta stock ni guarda datos parciales', () => {
 });
 
 test('códigos de barras: altas, edición, unicidad y colisiones con códigos internos', () => {
-  const base = { codigo: 'P-025', codigoBarras: '0123456789012', nombre: 'Producto de prueba', categoria: 'Despensa', unidadMedida: 'unidad', precioGlobal: 2 };
+  const base = { codigo: 'P-025', codigoBarras: '01234567', nombre: 'Producto de prueba', categoria: 'Despensa', unidadMedida: 'unidad', precioGlobal: 2 };
   assert.equal(store.crearProducto(base).ok, true);
   assert.equal(store.getProducto(store.getState(), base.codigo).codigoBarras, base.codigoBarras);
   assert.equal(store.crearProducto({ ...base, codigo: 'P-026' }).ok, false);
   assert.equal(store.crearProducto({ ...base, codigo: base.codigoBarras, codigoBarras: '' }).ok, false);
+  assert.equal(store.crearProducto({ ...base, codigo: 'P-027', codigoBarras: '123456789' }).ok, false);
   assert.equal(store.actualizarProducto('L-002', { ...base, codigoBarras: base.codigoBarras }).ok, false);
   assert.equal(store.actualizarProducto('L-002', { ...base, codigoBarras: 'abc' }).ok, false);
-  assert.equal(store.actualizarProducto(base.codigo, { ...base, codigoBarras: '9876543210987' }).ok, true);
+  assert.equal(store.actualizarProducto(base.codigo, { ...base, codigoBarras: '98765432' }).ok, true);
   assert.equal(store.actualizarProducto(base.codigo, { ...base, codigoBarras: '' }).ok, true);
 });
 

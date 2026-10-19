@@ -1,8 +1,10 @@
 'use client';
+
 import { useEffect, useMemo, useState } from 'react';
 import { History, SearchX, Tag as TagIcon } from 'lucide-react';
 import type { User } from '@/lib/types';
 import { getHistorialPrecios, getProducto, setPrecioGlobal, useStore } from '@/lib/store';
+import { coincideCodigoBarras } from '@/lib/pos';
 import { cx, fechaHora, money, norm } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { ErrorBox, Field, Input, SearchBox, Toolbar } from '@/components/ui/form';
@@ -11,7 +13,7 @@ import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 
 /**
- * Módulo 3 · Gestión de precios (F07 modificar precio global).
+ * Módulo 3 — Gestión de precios (F07 modificar precio global).
  * Un único precio por producto, válido en todas las sedes y aplicable a nuevas ventas.
  */
 export function PricesPanel({ user }: { user: User }) {
@@ -22,7 +24,7 @@ export function PricesPanel({ user }: { user: User }) {
   const [flash, setFlash] = useState<string | null>(null);
   const hist = useMemo(() => getHistorialPrecios(state, 8), [state]);
   const list = useMemo(() => state.productos
-    .filter((p) => !q || norm(p.nombre).includes(norm(q)) || norm(p.codigo).includes(norm(q)))
+    .filter((p) => !q || norm(p.nombre).includes(norm(q)) || norm(p.codigo).includes(norm(q)) || coincideCodigoBarras(p.codigoBarras, q))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')), [state.productos, q]);
 
   useEffect(() => {
@@ -38,9 +40,10 @@ export function PricesPanel({ user }: { user: User }) {
         description="El precio global se actualiza una sola vez y vale para todas las sedes. Las ventas ya registradas no cambian."
       />
       {!isAdmin && <p className="mb-4 rounded-xl border border-line bg-soft px-3.5 py-2.5 text-muted">Solo lectura: únicamente el administrador puede modificar el precio global.</p>}
+
       <div className="grid grid-cols-1 items-start gap-[18px] lg:grid-cols-[minmax(0,1fr)_320px]">
         <div>
-          <Toolbar><SearchBox value={q} onChange={setQ} /></Toolbar>
+          <Toolbar><SearchBox value={q} onChange={setQ} placeholder="Buscar por nombre o código" /></Toolbar>
           <TableWrap caption="Precio global por producto" minWidth={520}>
             <thead>
               <tr>
@@ -53,7 +56,10 @@ export function PricesPanel({ user }: { user: User }) {
               {list.length === 0 && <tr><td colSpan={4}><EmptyState title="Sin resultados" icon={SearchX}>No hay productos que coincidan.</EmptyState></td></tr>}
               {list.map((p) => (
                 <tr key={p.codigo} className={cx('group hover:bg-[#f8fbfe]', flash === p.codigo && 'animate-flash')}>
-                  <th scope="row" className={cx(tdCls, 'text-left font-normal')}><strong className="text-strong">{p.nombre}</strong><Sub>{p.codigo}{p.activo ? '' : ' · inactivo'}</Sub></th>
+                  <th scope="row" className={cx(tdCls, 'text-left font-normal')}>
+                    <strong className="text-strong">{p.nombre}</strong>
+                    <Sub>{p.codigo}{p.codigoBarras ? ` · Barras: ${p.codigoBarras}` : ''}{p.activo ? '' : ' · inactivo'}</Sub>
+                  </th>
                   <td className={tdCls}>{p.categoria}</td>
                   <td className={cx(tdCls, numCls)}><strong className="text-strong">{money(p.precioGlobal)}</strong> <span className="text-xs text-muted">/ {p.unidadMedida}</span></td>
                   {isAdmin && (
@@ -67,6 +73,7 @@ export function PricesPanel({ user }: { user: User }) {
           </TableWrap>
           <p role="status" className="mt-2.5 ml-0.5 text-[13px] text-muted">{list.length} productos</p>
         </div>
+
         <Box title="Cambios recientes" icon={History}>
           {hist.length === 0 ? <p className="m-0 text-muted">Todavía no hay cambios de precio.</p> : (
             <ul className="m-0 flex list-none flex-col gap-3 p-0">
