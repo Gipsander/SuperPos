@@ -17,13 +17,17 @@ export function cantidadValida(producto: Pick<Producto, 'unidadMedida'>, n: numb
     (producto.unidadMedida === 'kg' ? Math.abs(n * 1000 - Math.round(n * 1000)) < 1e-7 : Number.isInteger(n));
 }
 
+/** Asterisco y uno o más dígitos; conserva los ceros iniciales. */
+export function esBusquedaPorTerminacion(query: string): boolean {
+  return /^\*[0-9]+$/.test(query.trim());
+}
+
 export function coincideCodigoBarras(codigoBarras: string | undefined, query: string): boolean {
   if (!codigoBarras) return false;
   const q = query.trim();
   if (!q) return false;
   if (q.startsWith('*')) {
-    const sufijo = q.slice(1).trim();
-    return /^[0-9]{1,4}$/.test(sufijo) && codigoBarras.endsWith(sufijo);
+    return esBusquedaPorTerminacion(q) && codigoBarras.endsWith(q.slice(1));
   }
   return codigoBarras.includes(q);
 }

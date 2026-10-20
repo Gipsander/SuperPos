@@ -21,10 +21,39 @@ Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
 } });
 const store = require(storePath);
 const auth = require(path.join(compiled, 'auth.js'));
+const { coincideCodigoBarras, esBusquedaPorTerminacion } = require(path.join(compiled, 'pos.js'));
 const admin = () => store.getState().usuarios.find((u) => u.username === 'rafael');
 const branch = { codigo: 'OESTE', nombre: 'Sede Oeste', estado: 'Lara', ciudad: 'Barquisimeto', direccion: 'Calle de prueba', activa: true };
 const account = (sedeId, role = 'cajero') => ({ username: 'ana.demo', name: 'Ana Demo', role, sedeId, activo: true, password: 'demo123' });
 beforeEach(() => { saved = new Map(); store.resetDemo(); auth.logout(); });
+
+test('búsqueda por terminación admite cualquier longitud y conserva ceros iniciales', () => {
+  for (const query of ['*2', '*02', '*002', '*0002', '*00002', '*900002', '*75900002', '  *02  ']) {
+    assert.equal(esBusquedaPorTerminacion(query), true, query);
+    assert.equal(coincideCodigoBarras('75900002', query), true, query);
+  }
+  assert.equal(coincideCodigoBarras('12300852', '*00852'), true);
+  assert.equal(coincideCodigoBarras('12345005872', '*005872'), true);
+  assert.equal(coincideCodigoBarras('75900012', '*02'), false);
+  assert.equal(coincideCodigoBarras('02000099', '*02'), false);
+  assert.equal(coincideCodigoBarras('75900002', '*075900002'), false);
+  assert.equal(coincideCodigoBarras(undefined, '*02'), false);
+  for (const query of ['', '*', '**02', '*0x', '*-02', '* 02', '*0 2', '*02*']) {
+    assert.equal(esBusquedaPorTerminacion(query), false, query);
+    assert.equal(coincideCodigoBarras('75900002', query), false, query);
+  }
+  assert.equal(coincideCodigoBarras('75900002', '9000'), true);
+  assert.equal(coincideCodigoBarras('75900002', '75900002'), true);
+});
+
+test('búsqueda por sufijo conserva todas las coincidencias de la sede, incluso agotados, y excluye inactivos', () => {
+  const state = structuredClone(store.getState());
+  state.productos = ['11110002', '22220002', '33330002', '44440002', '55550002', '02000099'].map((barras, i) => ({ codigo: `AUD-${i}`, codigoBarras: barras, nombre: `Ejemplo ${i}`, categoria: 'Despensa', unidadMedida: 'unidad', precioGlobal: 1, activo: i !== 3 }));
+  state.existencias = state.productos.map((p, i) => ({ sedeId: i === 4 ? 's2' : 's1', productoCodigo: p.codigo, cantidad: i === 1 ? 0 : 10, stockMinimo: 1, habilitado: i !== 2 }));
+  const matches = store.getStock(state, 's1').filter(r => coincideCodigoBarras(r.producto.codigoBarras, '*02'));
+  assert.deepEqual(matches.map(r => r.producto.codigoBarras), ['11110002', '22220002']);
+  assert.equal(matches[1].cantidad, 0);
+});
 
 test('sede nueva → usuario → mercancía → venta en su única sede', () => {
   const created = store.guardarSede(admin(), branch);
@@ -144,12 +173,92 @@ test('clientes: validación, cédula única, permisos y recuperación al recarga
 
 test('migración incorpora clientes sin borrar ventas ni inventario anteriores', () => {
   const legacy = structuredClone(store.getState()); delete legacy.clientes;
+  delete legacy.clientesDemoVersion;
   saved.set('superpos.store.v2', JSON.stringify(legacy));
   delete require.cache[storePath];
   const restored = require(storePath);
-  assert.deepEqual(restored.getState().clientes, []);
+  assert.equal(restored.getState().clientes.length, 5);
+  assert.equal(restored.getState().clientesDemoVersion, 1);
   assert.deepEqual(restored.getState().existencias, legacy.existencias);
   assert.deepEqual(restored.getState().ventas, legacy.ventas);
+});
+
+test('administrador corrige todos los datos, cambia documento y conserva los recibos históricos', () => {
+  const original = store.buscarCliente(store.getState(), 'V-91000001');
+  const sale = store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }], 'tarjeta', 'Luis', undefined, original.cedula);
+  assert.equal(sale.ok, true);
+  const ventasAntes = structuredClone(store.getState().ventas);
+  const count = store.getState().clientes.length;
+  const input = { cedula: ' e 0091000011 ', nombres: '  María   Corregida ', apellidos: ' Pérez López ', telefono: '0414-1234567', direccion: ' Calle corregida 2 ', telefonoConocido: '0212-1234567' };
+  const result = store.actualizarCliente(admin(), original.cedula, input);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.cliente, { cedula: 'E-91000011', nombres: 'María Corregida', apellidos: 'Pérez López', telefono: '04141234567', direccion: 'Calle corregida 2', telefonoConocido: '02121234567' });
+  assert.equal(store.buscarCliente(store.getState(), original.cedula), undefined);
+  assert.equal(store.getState().clientes.length, count);
+  assert.deepEqual(store.getState().ventas, ventasAntes);
+  assert.equal(store.actualizarCliente(admin(), result.cliente.cedula, { ...result.cliente, telefonoConocido: '' }).ok, true);
+  delete require.cache[storePath];
+  const restored = require(storePath);
+  assert.equal(restored.buscarCliente(restored.getState(), 'E-91000011').nombres, 'María Corregida');
+  assert.equal(restored.buscarCliente(restored.getState(), 'E-91000011').telefonoConocido, '');
+  assert.equal(restored.buscarCliente(restored.getState(), original.cedula), undefined);
+  assert.equal(restored.getState().clientes.length, count);
+  const nextSale = restored.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }], 'tarjeta', 'Luis', undefined, 'E-91000011');
+  assert.equal(nextSale.ok, true);
+  assert.equal(nextSale.venta.cliente.nombres, 'María Corregida');
+});
+
+test('edición de clientes rechaza otros roles, cuentas inactivas, duplicados y datos inválidos sin cambios parciales', () => {
+  const original = store.getState().clientes[0];
+  const cashier = store.getState().usuarios.find((u) => u.role === 'cajero');
+  const inventory = store.getState().usuarios.find((u) => u.role === 'inventario');
+  assert.equal(store.guardarUsuario(admin(), { ...account('s1', 'admin'), activo: false }).ok, true);
+  const inactive = store.getState().usuarios.find((u) => u.username === 'ana.demo');
+  const before = JSON.stringify(store.getState());
+  for (const actor of [cashier, inventory, inactive, { ...cashier, role: 'admin' }, { ...admin(), username: 'inexistente' }]) {
+    assert.equal(store.actualizarCliente(actor, original.cedula, { ...original, nombres: 'No autorizado' }).ok, false);
+  }
+  for (const changes of [{ cedula: 'v 091000002' }, { cedula: 'X-123' }, { nombres: '' }, { apellidos: '' }, { telefono: '123' }, { direccion: '' }, { telefonoConocido: 'abc' }]) {
+    assert.equal(store.actualizarCliente(admin(), original.cedula, { ...original, ...changes }).ok, false);
+  }
+  assert.equal(store.actualizarCliente(admin(), 'V-999999999', original).ok, false);
+  assert.equal(JSON.stringify(store.getState()), before);
+});
+
+test('edición de razón social conserva ceros del RIF y permite completar clientes antiguos', () => {
+  const empresa = store.getState().clientes.find((c) => c.cedula.startsWith('J-'));
+  const result = store.actualizarCliente(admin(), empresa.cedula, { ...empresa, cedula: 'J-001234500', nombres: 'Razón social corregida', apellidos: 'No aplica' });
+  assert.equal(result.ok, true);
+  assert.equal(result.cliente.cedula, 'J-001234500');
+  assert.equal(result.cliente.apellidos, '');
+  const legacy = structuredClone(store.getState());
+  delete legacy.clientes[0].direccion;
+  delete legacy.clientes[0].telefonoConocido;
+  saved.set('superpos.store.v2', JSON.stringify(legacy));
+  delete require.cache[storePath];
+  const restored = require(storePath);
+  const cliente = restored.getState().clientes[0];
+  assert.equal(restored.actualizarCliente(admin(), cliente.cedula, { ...cliente, direccion: 'Dirección completada' }).ok, true);
+});
+
+test('los ejemplos se incorporan una vez sin reemplazar clientes existentes ni reponer documentos corregidos', () => {
+  const legacy = structuredClone(store.getState());
+  delete legacy.clientesDemoVersion;
+  const existente = { ...legacy.clientes[0], nombres: 'Nombre guardado por usuario' };
+  legacy.clientes = [existente];
+  saved.set('superpos.store.v2', JSON.stringify(legacy));
+  delete require.cache[storePath];
+  const restored = require(storePath);
+  assert.equal(restored.getState().clientes.length, 5);
+  assert.equal(restored.buscarCliente(restored.getState(), existente.cedula).nombres, existente.nombres);
+  assert.deepEqual(restored.getState().ventas, legacy.ventas);
+  assert.deepEqual(restored.getState().existencias, legacy.existencias);
+  assert.equal(restored.actualizarCliente(admin(), existente.cedula, { ...existente, cedula: 'V-92000001' }).ok, true);
+  delete require.cache[storePath];
+  const reloaded = require(storePath);
+  assert.equal(reloaded.getState().clientes.length, 5);
+  assert.equal(reloaded.buscarCliente(reloaded.getState(), existente.cedula), undefined);
+  assert.equal(reloaded.buscarCliente(reloaded.getState(), 'V-92000001').nombres, existente.nombres);
 });
 
 test('venta por peso: cliente en recibo, redondeo monetario y descuento exacto', () => {

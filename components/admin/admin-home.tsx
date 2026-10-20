@@ -1,12 +1,12 @@
 'use client';
 import {
-  ArrowUpRight, BarChart3, Box, Boxes, Hammer, Store, Tag, Users, type LucideIcon,
+  ArrowUpRight, BarChart3, Box, Boxes, ContactRound, Hammer, Store, Tag, Users, type LucideIcon,
 } from 'lucide-react';
 import type { AdminPage } from '@/components/admin/modules';
 import { ADMIN_MODULES } from '@/components/admin/modules';
 import { PageHeading } from '@/components/ui/layout';
 
-const ICONS: Record<string, LucideIcon> = { users: Users, store: Store, box: Box, inventory: Boxes, price: Tag, chart: BarChart3 };
+const ICONS: Record<string, LucideIcon> = { users: Users, customers: ContactRound, store: Store, box: Box, inventory: Boxes, price: Tag, chart: BarChart3 };
 
 export function AdminHome({ name, onNavigate }: { name: string; onNavigate: (p: AdminPage) => void }) {
   return (

@@ -5,6 +5,7 @@ import type {
 } from './types';
 import { cantidadValida, importeLinea, normalizarCedula, redondearCantidad } from './pos';
 import { ROLES, USUARIOS_DEMO } from './roles';
+import { CLIENTES_DEMO } from './clientes-demo';
 
 // Estado compartido de SuperPOS (catálogo, existencias por sede, movimientos y ventas).
 // Es un store reactivo (useSyncExternalStore) que persiste en localStorage de forma transparente.
@@ -126,7 +127,7 @@ function seed(): StoreState {
       }
     }
   }
-  return { clientes: [], usuarios: structuredClone(USUARIOS_DEMO), sedes: structuredClone(SEDES), productos, existencias, movimientos, historialPrecios: [], ventas, seq: 2000 };
+  return { clientes: structuredClone(CLIENTES_DEMO), clientesDemoVersion: 1, usuarios: structuredClone(USUARIOS_DEMO), sedes: structuredClone(SEDES), productos, existencias, movimientos, historialPrecios: [], ventas, seq: 2000 };
 }
 
 /** Datos guardados con la nomenclatura anterior (P-001…P-024 para todo): recodifica por categoría en todas las referencias. */
@@ -163,6 +164,13 @@ function load(): StoreState {
             direccion: s.direccion ?? base?.direccion ?? '', activa: s.activa ?? true };
         });
         data.clientes ??= [];
+        // Una sola incorporación: nunca reemplaza clientes ni restaura ejemplos ya corregidos.
+        if (!data.clientesDemoVersion) {
+          for (const cliente of CLIENTES_DEMO) {
+            if (!data.clientes.some((c) => normalizarCedula(c.cedula) === cliente.cedula)) data.clientes.push({ ...cliente });
+          }
+          data.clientesDemoVersion = 1;
+        }
         data.usuarios ??= structuredClone(USUARIOS_DEMO);
         migrarCodigosLegacy(data);
         // Asigna los códigos de barras de 8 dígitos a los 24 productos iniciales si aún no tenían uno guardado
@@ -331,12 +339,25 @@ export function buscarCliente(s: StoreState, cedula: string): Cliente | undefine
 }
 
 export function registrarCliente(actor: User, input: Cliente): Result<{ cliente: Cliente }> {
+  return guardarCliente(actor, input);
+}
+
+/** Corrige el registro maestro; las ventas conservan la copia histórica de su cliente. */
+export function actualizarCliente(actor: User, cedulaActual: string, input: Cliente): Result<{ cliente: Cliente }> {
+  return guardarCliente(actor, input, cedulaActual);
+}
+
+function guardarCliente(actor: User, input: Cliente, cedulaActual?: string): Result<{ cliente: Cliente }> {
   return mutate((d) => {
     const cuenta = d.usuarios.find((u) => u.username === actor.username && u.activo);
-    if (!cuenta || !['admin', 'cajero'].includes(cuenta.role) || !sedesDeUsuario(d, cuenta).length) return fail('No tienes permiso para registrar clientes.');
+    const editando = cedulaActual !== undefined;
+    if (editando && !esAdministrador(d, actor)) return fail('Solo el administrador puede modificar clientes.');
+    if (!editando && (!cuenta || !['admin', 'cajero'].includes(cuenta.role) || !sedesDeUsuario(d, cuenta).length)) return fail('No tienes permiso para registrar clientes.');
+    const actual = editando ? buscarCliente(d, cedulaActual) : undefined;
+    if (editando && !actual) return fail('El cliente ya no existe. Actualiza la lista e inténtalo de nuevo.');
     const cedula = normalizarCedula(input.cedula);
     if (!cedula) return fail('Selecciona el tipo de documento e ingresa su número.');
-    if (d.clientes.some((c) => c.cedula === cedula)) return fail('Ya existe un cliente con ese documento. Consúltalo nuevamente.');
+    if (d.clientes.some((c) => c !== actual && c.cedula === cedula)) return fail('Ya existe un cliente con ese documento. Consúltalo nuevamente.');
     const nombres = input.nombres.trim().replace(/\s+/g, ' ');
     const apellidos = input.apellidos.trim().replace(/\s+/g, ' ');
     const empresa = /^[JG]-/.test(cedula);
@@ -348,7 +369,7 @@ export function registrarCliente(actor: User, input: Cliente): Result<{ cliente:
     const telefono = input.telefono.replace(/[\s()-]/g, '');
     if (!/^\+?[0-9]{10,15}$/.test(telefono)) return fail('Ingresa un teléfono de 10 a 15 dígitos, con prefijo internacional opcional.');
     const cliente: Cliente = { cedula, nombres, apellidos: empresa ? '' : apellidos, telefono, direccion, telefonoConocido };
-    d.clientes.push(cliente);
+    if (actual) Object.assign(actual, cliente); else d.clientes.push(cliente);
     return { ok: true, cliente };
   });
 }

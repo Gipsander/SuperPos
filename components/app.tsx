@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ArrowLeft, BarChart3, Box, Boxes, LayoutGrid, LogOut, Store, Tag, Users, type LucideIcon,
+  ArrowLeft, BarChart3, Box, Boxes, ContactRound, LayoutGrid, LogOut, Store, Tag, Users, type LucideIcon,
 } from 'lucide-react';
 import { logout, useUser } from '@/lib/auth';
 import type { User } from '@/lib/types';
@@ -15,13 +15,14 @@ import { ModulePlaceholder } from '@/components/admin/module-placeholder';
 import { SubBackContext, type SubBack } from '@/components/admin/sub-back';
 import { Dashboard } from '@/components/admin/dashboard';
 import { UsersPanel } from '@/components/admin/users-panel';
+import { CustomersPanel } from '@/components/admin/customers-panel';
 import { BranchesPanel } from '@/components/admin/branches-panel';
 import { CatalogPanel } from '@/components/inventory/catalog-panel';
 import { InventoryPanel } from '@/components/inventory/inventory-panel';
 import { PricesPanel } from '@/components/inventory/prices-panel';
 import { PosTerminal } from '@/components/pos/pos-terminal';
 
-const ICONS: Record<string, LucideIcon> = { inicio: LayoutGrid, users: Users, store: Store, box: Box, inventory: Boxes, price: Tag, chart: BarChart3 };
+const ICONS: Record<string, LucideIcon> = { inicio: LayoutGrid, users: Users, customers: ContactRound, store: Store, box: Box, inventory: Boxes, price: Tag, chart: BarChart3 };
 const PAGES = new Set<string>(['inicio', ...ADMIN_MODULES.map((m) => m.id)]);
 
 const Brand = () => (
@@ -105,6 +106,7 @@ function AdminShell({ user }: { user: User }) {
           )}
           {page === 'inicio' && <AdminHome name={user.name} onNavigate={go} />}
           {page === 'usuarios' && <UsersPanel key={selectedSede} user={user} initialSedeId={selectedSede} />}
+          {page === 'clientes' && <CustomersPanel user={user} />}
           {page === 'sedes' && <BranchesPanel user={user} onNavigate={go} />}
           {page === 'productos' && <CatalogPanel key={selectedSede} user={user} initialSedeId={selectedSede} />}
           {page === 'inventario' && <InventoryPanel key={selectedSede} user={user} initialSedeId={selectedSede} />}

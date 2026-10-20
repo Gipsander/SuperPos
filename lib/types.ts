@@ -84,6 +84,7 @@ export interface Venta {
 }
 
 export interface StoreState {
+  clientesDemoVersion?: number;
   clientes: Cliente[];
   usuarios: CuentaDemo[];
   sedes: Sede[];

@@ -21,14 +21,14 @@ export function ProductCatalog({ rows, enCarrito, onAdd }: {
     return rows
       .filter((r) =>
         coincideCodigoBarras(r.producto.codigoBarras, term) ||
-        norm(`${r.producto.nombre} ${r.productoCodigo} ${r.producto.codigoBarras ?? ''}`).includes(norm(term)),
+        (!term.startsWith('*') && norm(`${r.producto.nombre} ${r.productoCodigo} ${r.producto.codigoBarras ?? ''}`).includes(norm(term))),
       )
       .sort((a, b) => Number(a.estado === 'agotado') - Number(b.estado === 'agotado') || a.producto.nombre.localeCompare(b.producto.nombre, 'es'));
   }, [rows, q]);
 
   return <div>
-    <SearchBox value={q} onChange={setQ} placeholder="Nombre, código interno, barras o *últimos 4 dígitos (ej. *8143)" />
-    {!q.trim() ? <EmptyState title="Busca el producto">Escribe su nombre, código de barras o usa * seguido de los últimos 4 dígitos (ej. *8143).</EmptyState> : !list.length ? <EmptyState title="Sin coincidencias">Revisa el nombre o código. Solo se muestran productos activos y habilitados en esta sede.</EmptyState> :
+    <SearchBox value={q} onChange={setQ} placeholder="Nombre, código interno, barras o *terminación (ej. *02)" />
+    {!q.trim() ? <EmptyState title="Busca el producto">Escribe su nombre, código de barras o usa * seguido de uno o más dígitos finales (ej. *02).</EmptyState> : !list.length ? <EmptyState title="Sin coincidencias">Revisa el nombre o código. Solo se muestran productos activos y habilitados en esta sede.</EmptyState> :
       <ul className="m-0 mt-3 max-h-[50dvh] list-none overflow-auto p-0">{list.map((r) => {
         const disponible = r.cantidad - (enCarrito[r.productoCodigo] ?? 0);
         return <li key={r.productoCodigo} className="flex flex-wrap items-center gap-3 border-b border-line py-3">

@@ -88,6 +88,14 @@ Regla de alerta: **agotado** si `cantidad = 0`; **stock bajo** si `cantidad < st
 
 Listos: usuarios y roles (F02), sedes (F03), catálogo, precios, inventario, punto de venta y panel/reportes.
 
+### Clientes del administrador
+
+Entra como administrador y abre **Clientes → Editar**. Puedes buscar por nombre, cédula/RIF o teléfono y filtrar personas o empresas. Permite corregir documento, nombres, apellidos/razón social, teléfono, dirección y contacto alternativo; un documento ya registrado en otro cliente se rechaza. Solo un administrador activo puede editar, también al llamar a la operación del store.
+
+Los cambios se guardan en el almacenamiento local y aparecen al consultar nuevamente al cliente en caja. Si corriges el documento, la próxima consulta debe usar el nuevo. Los recibos anteriores conservan la copia de los datos con los que se emitieron.
+
+Se incluyen cinco clientes ficticios con «Demo» en el nombre: Mariana, Carlos Andrés, Lucía, Daniel y Abastos Ejemplo. Por ejemplo, puedes consultar `V-91000001`. Los ejemplos se incorporan una sola vez a los datos existentes, sin reemplazar clientes con el mismo documento ni borrar inventario o ventas; después puedes editarlos sin que se restauren sus datos originales al recargar.
+
 ### Recorrido de administración
 
 1. Ingresa con `rafael` / `admin` y abre **Sedes → Crear sede**. Registra código único, nombre, estado geográfico, ciudad y dirección.
@@ -108,6 +116,7 @@ La exportación estática (`out/`) se puede publicar en GitHub Pages con una acc
 - Área principal: detalle de venta con código, descripción, precio, cantidad editable e importe. Resumen de cobro lateral en escritorio.
 - F2 enfoca la entrada de códigos. Código + Enter selecciona el producto y pasa al campo Cantidad, con 1 seleccionado. Escribir la cantidad + Enter agrega todas las unidades y devuelve el foco al código vacío. Otro Enter acepta una unidad. Escape cancela la selección pendiente sin agregarla. El lector debe actuar como teclado y terminar con Enter.
 - F3 abre la búsqueda auxiliar por nombre o código; no hay catálogo permanente en la caja. Productos inactivos o no habilitados para la sede no se venden; el stock se valida de nuevo al cobrar.
+- En la entrada de caja escribe `*` seguido de uno o más dígitos finales, por ejemplo `*02`, `*00852` o `*005872`, y pulsa Enter. Se abre una ventana pequeña con todas las coincidencias de códigos de barras activos y habilitados en la sede, mostrando código completo, nombre, precio y disponibilidad. La lista tiene desplazamiento cuando hay muchos resultados; no aparece debajo del buscador. Seleccionar un producto pasa a cantidad/peso, incluso cuando solo hay una coincidencia. Los agotados se muestran sin permitir seleccionarlos. Escape o «Volver al código» cierra la ventana; una búsqueda vacía o mal formada se rechaza. F3, catálogo, precios e inventario usan la misma comparación por terminación.
 - Documento: selector V- predeterminado, E- para extranjero y J-/G- para RIF. Pulsa Consultar o Enter. Admite números cortos o largos sin exigir una longitud fija; conserva precisión y los ceros iniciales del RIF. Si existe, muestra el nombre; si no, abre el registro con documento editable, nombres y apellidos (razón social para J/G), teléfono, dirección y teléfono opcional de un conocido. La validación es de formato, no verifica identidad ni validez fiscal ante un organismo. Los clientes antiguos siguen disponibles aunque no tengan los nuevos campos.
 - El cliente se guarda en el mismo almacenamiento local del prototipo y queda disponible para las cajas de ese navegador. No se duplican cédulas. Cambiar la cédula invalida la selección anterior.
 - El cobro requiere cliente identificado. F8 abre el cobro; el recibo guarda una copia del cliente asociado. Nueva venta limpia la selección, conservando el registro del cliente.
