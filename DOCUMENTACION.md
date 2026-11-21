@@ -46,6 +46,9 @@ Superpos-prototipo/
 ├── public/               # Imágenes y recursos estáticos (logo.svg)
 ├── README.md             # Instrucciones de uso e instalación
 ├── ANALISIS.md           # Análisis del sistema: alcance, reglas, caminos alternativos y decisiones
+├── CLASIFICACION_SUGERENCIAS.md  # Sugerencias de la evaluación clasificadas y justificadas según el análisis
+├── MODELO_DATOS.md       # Diagrama Entidad–Relación y diccionario de datos
+├── modelo_datos.sql      # Esquema relacional ejecutable (PostgreSQL y SQLite)
 └── DOCUMENTACION.md      # Este documento con la explicación del desarrollo
 ```
 

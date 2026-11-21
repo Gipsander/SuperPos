@@ -128,6 +128,15 @@ La exportación estática (`out/`) se puede publicar en GitHub Pages con una acc
 - Cancelar venta o cambiar sede con una venta en curso requiere confirmar antes de descartar. Cobro, inventario y recibo utilizan el mismo redondeo por línea a centavos.
 - Se migran datos anteriores agregando clientes vacíos; se conservan inventario, cuentas y ventas históricas. El prototipo sigue usando localStorage, sin sincronización entre equipos ni backend de producción.
 
+## Documentación de diseño
+
+| Documento | Contenido |
+|-----------|-----------|
+| [`ANALISIS.md`](ANALISIS.md) | Análisis (SDD): alcance, reglas, caminos alternativos y decisiones D1 a D21 |
+| [`CLASIFICACION_SUGERENCIAS.md`](CLASIFICACION_SUGERENCIAS.md) | Sugerencias de la evaluación: mejoras UX/UI, cambios de lógica y descartadas, con su justificación |
+| [`MODELO_DATOS.md`](MODELO_DATOS.md) | Diagrama Entidad–Relación y diccionario de datos (tipos, claves, restricciones e índices) |
+| [`modelo_datos.sql`](modelo_datos.sql) | Esquema relacional ejecutable (PostgreSQL y SQLite) |
+
 ### Referencias de diseño
 
 Son patrones de operación documentados, no una certificación ni un único estándar obligatorio de interfaz:
