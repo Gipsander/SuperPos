@@ -21,6 +21,7 @@ import { ProductCatalog } from './product-catalog';
 import { ReceiptModal } from './receipt-modal';
 
 interface Item { codigo: string; cantidad: number }
+interface AlertaStock { codigo: string; nombre: string; unidad: string; stock: number; enVenta: number; restante: number }
 /** Marca que add() ya mostró la alerta grande de stock: los llamadores no repiten el aviso. */
 const ALERTADO = '__stock_alertado__';
 
@@ -38,7 +39,7 @@ export function PosTerminal({ user }: { user: User }) {
   const [abiertoDropdown, setAbiertoDropdown] = useState(false);
   const [error, setError] = useState('');
   const [mensaje, setMensaje] = useState('');
-  const [alertaStock, setAlertaStock] = useState('');
+  const [alertaStock, setAlertaStock] = useState<AlertaStock | null>(null);
   const [buscando, setBuscando] = useState(false);
   const [seleccionado, setSeleccionado] = useState<FilaStock | null>(null);
   const [cantidadEntrada, setCantidadEntrada] = useState('1');
@@ -107,7 +108,7 @@ export function PosTerminal({ user }: { user: User }) {
 
   useEffect(() => {
     if (!alertaStock) return;
-    const t = setTimeout(() => setAlertaStock(''), 8000);
+    const t = setTimeout(() => setAlertaStock(null), 12000);
     return () => clearTimeout(t);
   }, [alertaStock]);
 
@@ -159,7 +160,7 @@ export function PosTerminal({ user }: { user: User }) {
     const actual = byCode.get(r.productoCodigo);
     if (!actual) return 'Ingresa una cantidad válida.';
     // Sin existencias en esta sede la venta se bloquea sola, sin depender de apagar el producto a mano.
-    if (actual.cantidad <= 0) { avisarStock(actual, 'Producto agotado en esta sede.'); return ALERTADO; }
+    if (actual.cantidad <= 0) { avisarStock(actual); return ALERTADO; }
     if (!cantidadValida(actual.producto, cantidad)) return 'Ingresa una cantidad válida.';
     const nueva = redondearCantidad((enCarrito[r.productoCodigo] ?? 0) + cantidad);
     if (nueva > actual.cantidad) { avisarStock(actual); return ALERTADO; }
@@ -168,7 +169,7 @@ export function PosTerminal({ user }: { user: User }) {
       const previo = c.find((i) => i.codigo === r.productoCodigo);
       return [{ codigo: r.productoCodigo, cantidad: redondearCantidad((previo?.cantidad ?? 0) + cantidad) }, ...c.filter((i) => i.codigo !== r.productoCodigo)];
     });
-    setAlertaStock('');
+    setAlertaStock(null);
     setCodigo('');
     setAbiertoDropdown(false);
     setSeleccionado(null);
@@ -179,16 +180,18 @@ export function PosTerminal({ user }: { user: User }) {
     return null;
   }
 
-  function avisarStock(f: FilaStock, extra = '') {
-    const u = f.producto.unidadMedida;
+  function avisarStock(f: FilaStock) {
     const enVenta = enCarrito[f.productoCodigo] ?? 0;
-    setAlertaStock(`Stock insuficiente: solo quedan ${num(f.cantidad)} ${u === 'unidad' ? 'unidades' : u} disponibles en esta sede${enVenta ? ` (ya tienes ${num(enVenta)} en la venta)` : ''}. ${f.producto.nombre}${extra ? ` · ${extra}` : ''}`);
+    setAlertaStock({
+      codigo: f.productoCodigo, nombre: f.producto.nombre, unidad: f.producto.unidadMedida,
+      stock: f.cantidad, enVenta, restante: Math.max(0, redondearCantidad(f.cantidad - enVenta)),
+    });
     setError('');
   }
 
-  function agregarDirecto(r: FilaStock) {
+  function agregarDirecto(r: FilaStock, cantidadFija?: number) {
     const cantParsed = Number(cantidadEntrada.replace(',', '.'));
-    const cantidad = Number.isFinite(cantParsed) && cantParsed > 0 ? cantParsed : 1;
+    const cantidad = cantidadFija ?? (Number.isFinite(cantParsed) && cantParsed > 0 ? cantParsed : 1);
     const fallo = add(r, cantidad);
     if (fallo && fallo !== ALERTADO) {
       setError(fallo);
@@ -206,7 +209,7 @@ export function PosTerminal({ user }: { user: User }) {
     setCodigo('');
     setError('');
     setMensaje('');
-    setAlertaStock('');
+    setAlertaStock(null);
   }
 
   function cambiarSede(id: string) {
@@ -265,13 +268,46 @@ export function PosTerminal({ user }: { user: User }) {
         </div>
       )}
 
-      {alertaStock && (
-        <div role="alert" className="mb-3 flex items-start gap-3 rounded-xl border-2 border-danger bg-danger-bg px-4 py-4 text-danger shadow-md">
-          <TriangleAlert className="size-8 shrink-0" aria-hidden="true" />
-          <p className="m-0 flex-1 text-lg leading-snug font-extrabold">{alertaStock}</p>
-          <IconButton className="size-9 text-danger hover:bg-white/60" onClick={() => setAlertaStock('')} aria-label="Cerrar alerta de stock"><X aria-hidden="true" /></IconButton>
-        </div>
-      )}
+      {alertaStock && (() => {
+        const a = alertaStock;
+        const agotado = a.stock <= 0;
+        const u = a.unidad === 'unidad' ? 'unidades' : a.unidad;
+        const fila = byCode.get(a.codigo);
+        return (
+          <div role="alert" className="mb-3 overflow-hidden rounded-2xl border-2 border-danger bg-white shadow-lg">
+            <div className="flex items-center gap-3 bg-danger px-4 py-3 text-white">
+              <TriangleAlert className="size-7 shrink-0" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="m-0 text-lg leading-tight font-extrabold">{agotado ? 'Producto agotado en esta sede' : 'Stock insuficiente'}</p>
+                <p className="m-0 truncate text-sm opacity-90">{a.nombre}</p>
+              </div>
+              <IconButton className="size-9 text-white hover:bg-white/20" onClick={() => setAlertaStock(null)} aria-label="Cerrar alerta de stock"><X aria-hidden="true" /></IconButton>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3">
+              <p className="m-0 min-w-[220px] flex-1 text-base font-semibold text-strong">
+                {agotado
+                  ? <>No quedan existencias de este producto en esta sede.</>
+                  : <>Stock insuficiente: solo quedan <strong className="text-danger">{num(a.stock)} {u}</strong> disponibles en esta sede.</>}
+                {!agotado && a.enVenta > 0 && a.restante === 0 && <span className="block text-sm font-normal text-muted">Ya tienes todo el stock disponible en esta venta.</span>}
+              </p>
+              <dl className="m-0 flex gap-2 text-center">
+                {[['En la sede', a.stock, 'bg-soft text-strong'], ['En la venta', a.enVenta, 'bg-soft text-strong'], ['Puedes agregar', a.restante, a.restante > 0 ? 'bg-ok-bg text-ok' : 'bg-danger-bg text-danger']].map(([t, v, c]) => (
+                  <div key={t as string} className={`min-w-[88px] rounded-xl px-3 py-1.5 ${c}`}>
+                    <dt className="text-[11px] font-semibold opacity-80">{t}</dt>
+                    <dd className="m-0 text-xl leading-tight font-extrabold tabular-nums">{num(v as number)}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="flex gap-2">
+                {fila && a.restante > 0 && (
+                  <Button variant="primary" onClick={() => agregarDirecto(fila, a.restante)}>Agregar los {num(a.restante)} disponibles</Button>
+                )}
+                <Button onClick={() => { setAlertaStock(null); scanRef.current?.focus(); }}>Entendido</Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <fieldset disabled={!cliente} className={`m-0 mb-4 min-w-0 rounded-xl border border-line bg-white p-4 ${cliente ? '' : 'opacity-60'}`}>
         <legend className="sr-only">Agregar productos a la venta</legend>
@@ -476,7 +512,7 @@ export function PosTerminal({ user }: { user: User }) {
             return false;
           }
           if (cantidad > fila.cantidad) { avisarStock(fila); return false; }
-          setAlertaStock('');
+          setAlertaStock(null);
           setCart((c) => c.map((i) => (i.codigo === cod ? { ...i, cantidad } : i)));
           return true;
         }}

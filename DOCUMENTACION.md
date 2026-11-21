@@ -88,4 +88,6 @@ Desde **Sedes**, crea una tienda y abre su detalle para gestionar usuarios, habi
 
 El cajero ve su sede como texto fijo, sin desplegable. Los productos agotados aparecen al final del catálogo; cada grupo conserva el orden alfabético. Desactivar usuarios bloquea su acceso; desactivar una sede suspende sus operaciones conservando el historial.
 
-`npm test` ejecuta seis pruebas de administración, permisos, persistencia e integración con inventario y ventas.
+Mejoras posteriores: precios en USD con equivalente en Bs. según una tasa por día (editable solo la de hoy), validación de cliente antes de operar en caja, directorio de clientes, alertas de stock más claras, ingreso de mercancía directo en Inventario, activar/desactivar y eliminar sedes sin historial, y reportes Por Día o Semanal. Consulta `GUIA_DE_USUARIO.md` para el recorrido.
+
+`npm test` ejecuta 24 pruebas de administración, permisos, persistencia, tasas por día e integración con inventario y ventas.

@@ -176,7 +176,7 @@ El módulo de caja está diseñado para **alta velocidad**: cada acción tiene u
    * **Búsqueda Rápida (Terminación):** Escriba un asterisco seguido de los últimos dígitos del código de barras (ej. `*8143`).
    * **Búsqueda por Nombre:** Escriba parte del nombre o use **Buscar** (`F3`).
 3. **Carrito:** el producto agregado o escaneado aparece **arriba de todo**. En cada fila ajuste la cantidad con los botones **`-`** y **`+`** o escribiéndola en el campo numérico (los productos en `kg` admiten decimales, con paso de 0,1).
-4. **Alerta de stock:** si pide más unidades de las disponibles en su sede, aparece un **banner rojo grande**: *"Stock insuficiente: solo quedan X unidades disponibles en esta sede"*. Un producto con existencia `0` no puede agregarse.
+4. **Alerta de stock:** si pide más unidades de las disponibles en su sede, aparece un **banner rojo grande** con el encabezado *Stock insuficiente* (o *Producto agotado en esta sede*), el nombre del producto y el mensaje *"solo quedan X unidades disponibles en esta sede"*. Tres cifras resumen la situación (**En la sede**, **En la venta**, **Puedes agregar**) y dos botones permiten **Agregar los N disponibles** de una vez o **Entendido**. Un producto con existencia `0` no puede agregarse.
 5. **Total bimoneda:** el resumen muestra el total en `$` y en `Bs.` con la tasa del día. Al cobrar en efectivo, el **vuelto** también se indica en ambas monedas.
 6. Presione `F8` (o **Cobrar**) para elegir el método de pago y confirmar. El sistema descontará el stock de su sede de inmediato y emitirá el recibo (con montos en $ y Bs.).
 

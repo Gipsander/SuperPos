@@ -81,7 +81,7 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 
 - Un solo navegador por persona: los datos no se comparten entre equipos.
 - Cantidades de stock **enteras**.
-- Moneda única (USD) con formato regional `es`.
+- Precios base en USD con equivalente en Bs. según la tasa de cada día (editable solo la de hoy por el administrador); formato regional `es`.
 
 [↑ Volver al índice](#índice)
 
@@ -334,3 +334,4 @@ UI (React) ──useStore()──► lib/store.ts ──► localStorage
 | 0.3 | 10-10-2026 | Migración a Next.js, React, TypeScript y Tailwind; caja y panel con gráficos |
 | 0.4 | 10-10-2026 | Documentación: guía de uso y este análisis |
 | 0.5 | 10-10-2026 | Usuarios y sedes integrados, sede fija del cajero, agotados al final y seis pruebas automáticas |
+| 0.6 | 21-11-2026 | Bimoneda USD/Bs. con tasa por día, cliente obligatorio antes de operar en caja, directorio de clientes, ingreso directo en inventario, sedes activar/eliminar y reportes Por Día |
