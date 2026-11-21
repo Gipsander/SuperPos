@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, ScanBarcode, Search } from 'lucide-react';
+import { Plus, ScanBarcode, Search, TriangleAlert, UserRoundSearch, X } from 'lucide-react';
 import type { Cliente, FilaStock, MetodoPago, User, Venta } from '@/lib/types';
 import { getStock, registrarVenta, sedesDeUsuario, useStore } from '@/lib/store';
 import { cantidadValida, importeLinea, redondearCantidad } from '@/lib/pos';
-import { money, norm, num } from '@/lib/format';
+import { norm, num } from '@/lib/format';
 import { EmptyState } from '@/components/ui/layout';
 import { ErrorBox, Field, Input, SedeSelect } from '@/components/ui/form';
-import { Button } from '@/components/ui/button';
+import { Button, IconButton } from '@/components/ui/button';
+import { Kbd } from '@/components/ui/badge';
+import { Dual } from '@/components/ui/money';
 import { ConfirmModal, Modal } from '@/components/ui/modal';
 import { ProductIcon } from '@/components/ui/icons';
 import { useToast } from '@/components/ui/toast';
@@ -19,6 +21,8 @@ import { ProductCatalog } from './product-catalog';
 import { ReceiptModal } from './receipt-modal';
 
 interface Item { codigo: string; cantidad: number }
+/** Marca que add() ya mostró la alerta grande de stock: los llamadores no repiten el aviso. */
+const ALERTADO = '__stock_alertado__';
 
 export function PosTerminal({ user }: { user: User }) {
   const state = useStore();
@@ -34,6 +38,7 @@ export function PosTerminal({ user }: { user: User }) {
   const [abiertoDropdown, setAbiertoDropdown] = useState(false);
   const [error, setError] = useState('');
   const [mensaje, setMensaje] = useState('');
+  const [alertaStock, setAlertaStock] = useState('');
   const [buscando, setBuscando] = useState(false);
   const [seleccionado, setSeleccionado] = useState<FilaStock | null>(null);
   const [cantidadEntrada, setCantidadEntrada] = useState('1');
@@ -98,7 +103,13 @@ export function PosTerminal({ user }: { user: User }) {
     const input = seleccionado ? cantidadRef.current : scanRef.current;
     input?.focus();
     input?.select();
-  }, [modalAbierto, seleccionado]);
+  }, [modalAbierto, seleccionado, cliente]);
+
+  useEffect(() => {
+    if (!alertaStock) return;
+    const t = setTimeout(() => setAlertaStock(''), 8000);
+    return () => clearTimeout(t);
+  }, [alertaStock]);
 
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
@@ -113,6 +124,7 @@ export function PosTerminal({ user }: { user: User }) {
   useEffect(() => {
     function key(e: KeyboardEvent) {
       if (document.querySelector('[role="dialog"]') || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (!cliente && (e.key === 'F2' || e.key === 'F3')) return;
       if (e.key === 'F2' || (e.key === 'Escape' && (seleccionado || abiertoDropdown))) {
         e.preventDefault();
         setSeleccionado(null);
@@ -137,7 +149,7 @@ export function PosTerminal({ user }: { user: User }) {
     }
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [puedeCobrar, seleccionado, abiertoDropdown]);
+  }, [puedeCobrar, seleccionado, abiertoDropdown, cliente]);
 
   if (!sedeId) {
     return <EmptyState title="Sin sedes asignadas">Pide al administrador que te asigne una sede para vender.</EmptyState>;
@@ -145,18 +157,18 @@ export function PosTerminal({ user }: { user: User }) {
 
   function add(r: FilaStock, cantidad: number): string | null {
     const actual = byCode.get(r.productoCodigo);
-    if (!actual || !cantidadValida(actual.producto, cantidad)) return 'Ingresa una cantidad válida.';
+    if (!actual) return 'Ingresa una cantidad válida.';
+    // Sin existencias en esta sede la venta se bloquea sola, sin depender de apagar el producto a mano.
+    if (actual.cantidad <= 0) { avisarStock(actual, 'Producto agotado en esta sede.'); return ALERTADO; }
+    if (!cantidadValida(actual.producto, cantidad)) return 'Ingresa una cantidad válida.';
     const nueva = redondearCantidad((enCarrito[r.productoCodigo] ?? 0) + cantidad);
-    if (nueva > actual.cantidad) {
-      return `Stock insuficiente de ${actual.producto.nombre}. Puedes agregar ${redondearCantidad(
-        actual.cantidad - (enCarrito[r.productoCodigo] ?? 0),
-      )} ${actual.producto.unidadMedida} más.`;
-    }
-    setCart((c) =>
-      c.some((i) => i.codigo === r.productoCodigo)
-        ? c.map((i) => (i.codigo === r.productoCodigo ? { ...i, cantidad: redondearCantidad(i.cantidad + cantidad) } : i))
-        : [...c, { codigo: r.productoCodigo, cantidad }],
-    );
+    if (nueva > actual.cantidad) { avisarStock(actual); return ALERTADO; }
+    // El producto agregado o escaneado sube al principio de la lista.
+    setCart((c) => {
+      const previo = c.find((i) => i.codigo === r.productoCodigo);
+      return [{ codigo: r.productoCodigo, cantidad: redondearCantidad((previo?.cantidad ?? 0) + cantidad) }, ...c.filter((i) => i.codigo !== r.productoCodigo)];
+    });
+    setAlertaStock('');
     setCodigo('');
     setAbiertoDropdown(false);
     setSeleccionado(null);
@@ -167,11 +179,18 @@ export function PosTerminal({ user }: { user: User }) {
     return null;
   }
 
+  function avisarStock(f: FilaStock, extra = '') {
+    const u = f.producto.unidadMedida;
+    const enVenta = enCarrito[f.productoCodigo] ?? 0;
+    setAlertaStock(`Stock insuficiente: solo quedan ${num(f.cantidad)} ${u === 'unidad' ? 'unidades' : u} disponibles en esta sede${enVenta ? ` (ya tienes ${num(enVenta)} en la venta)` : ''}. ${f.producto.nombre}${extra ? ` · ${extra}` : ''}`);
+    setError('');
+  }
+
   function agregarDirecto(r: FilaStock) {
     const cantParsed = Number(cantidadEntrada.replace(',', '.'));
     const cantidad = Number.isFinite(cantParsed) && cantParsed > 0 ? cantParsed : 1;
     const fallo = add(r, cantidad);
-    if (fallo) {
+    if (fallo && fallo !== ALERTADO) {
       setError(fallo);
       toast(fallo, 'error');
     }
@@ -187,6 +206,7 @@ export function PosTerminal({ user }: { user: User }) {
     setCodigo('');
     setError('');
     setMensaje('');
+    setAlertaStock('');
   }
 
   function cambiarSede(id: string) {
@@ -238,7 +258,23 @@ export function PosTerminal({ user }: { user: User }) {
 
       <CustomerPanel key={revisionCliente} user={user} cliente={cliente} onChange={setCliente} />
 
-      <div className="mb-4 rounded-xl border border-line bg-white p-4">
+      {!cliente && (
+        <div role="alert" className="mb-3 flex items-start gap-3 rounded-xl border-2 border-warn bg-warn-bg px-4 py-3 text-warn">
+          <UserRoundSearch className="mt-0.5 size-6 shrink-0" aria-hidden="true" />
+          <p className="m-0 text-base font-bold">Primero identifica al cliente: consulta su cédula o RIF, regístralo o elígelo del directorio para poder agregar productos.</p>
+        </div>
+      )}
+
+      {alertaStock && (
+        <div role="alert" className="mb-3 flex items-start gap-3 rounded-xl border-2 border-danger bg-danger-bg px-4 py-4 text-danger shadow-md">
+          <TriangleAlert className="size-8 shrink-0" aria-hidden="true" />
+          <p className="m-0 flex-1 text-lg leading-snug font-extrabold">{alertaStock}</p>
+          <IconButton className="size-9 text-danger hover:bg-white/60" onClick={() => setAlertaStock('')} aria-label="Cerrar alerta de stock"><X aria-hidden="true" /></IconButton>
+        </div>
+      )}
+
+      <fieldset disabled={!cliente} className={`m-0 mb-4 min-w-0 rounded-xl border border-line bg-white p-4 ${cliente ? '' : 'opacity-60'}`}>
+        <legend className="sr-only">Agregar productos a la venta</legend>
         <form
           className="flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
@@ -247,7 +283,7 @@ export function PosTerminal({ user }: { user: User }) {
               const cantidad = Number(cantidadEntrada.replace(',', '.'));
               const fallo = add(seleccionado, cantidad);
               if (fallo) {
-                setError(fallo);
+                if (fallo !== ALERTADO) setError(fallo);
                 cantidadRef.current?.focus();
                 cantidadRef.current?.select();
               }
@@ -360,7 +396,7 @@ export function PosTerminal({ user }: { user: User }) {
                             </div>
                             <div className="flex shrink-0 items-center gap-2.5">
                               <div className="text-right">
-                                <strong className="block text-sm text-strong tabular-nums">{money(r.producto.precioGlobal)}</strong>
+                                <strong className="block text-right text-sm text-strong tabular-nums"><Dual usd={r.producto.precioGlobal} /></strong>
                                 <span className="block text-[11px] text-muted">/ {r.producto.unidadMedida}</span>
                               </div>
                               <span className="inline-flex size-8 items-center justify-center rounded-lg bg-brand text-white">
@@ -400,11 +436,17 @@ export function PosTerminal({ user }: { user: User }) {
 
           <Button type="submit" variant="primary" disabled={!codigo.trim()}>
             <ScanBarcode aria-hidden="true" />
-            Agregar · Enter
+            Agregar <Kbd onBrand>Enter</Kbd>
           </Button>
           <Button onClick={() => setBuscando(true)}>
             <Search aria-hidden="true" />
-            Catálogo · F3
+            Buscar <Kbd>F3</Kbd>
+          </Button>
+          <Button
+            title="Escribe * y los últimos dígitos del código de barras"
+            onClick={() => { setCodigo('*'); setSeleccionado(null); setError(''); setAbiertoDropdown(false); scanRef.current?.focus(); }}
+          >
+            Código corto <Kbd>*1234</Kbd>
           </Button>
         </form>
 
@@ -417,7 +459,11 @@ export function PosTerminal({ user }: { user: User }) {
             </span>
           )}
         </div>
-      </div>
+        <p className="mt-2 mb-0 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+          <span><Kbd>Enter</Kbd> Agregar</span><span><Kbd>F2</Kbd> Ir al buscador</span><span><Kbd>F3</Kbd> Buscar en catálogo</span>
+          <span><Kbd>F8</Kbd> Cobrar</span><span><Kbd>*1234</Kbd> Código corto</span><span>Todo se puede hacer también con el mouse.</span>
+        </p>
+      </fieldset>
 
       <CartPanel
         lineas={lineas}
@@ -425,11 +471,14 @@ export function PosTerminal({ user }: { user: User }) {
         invalido={invalido || !!seleccionado}
         onChange={(cod, cantidad) => {
           const fila = byCode.get(cod);
-          if (!fila || !cantidadValida(fila.producto, cantidad) || cantidad > fila.cantidad) {
-            toast('Cantidad inválida o superior al stock disponible.', 'error');
-            return;
+          if (!fila || !cantidadValida(fila.producto, cantidad)) {
+            toast('Cantidad inválida.', 'error');
+            return false;
           }
+          if (cantidad > fila.cantidad) { avisarStock(fila); return false; }
+          setAlertaStock('');
           setCart((c) => c.map((i) => (i.codigo === cod ? { ...i, cantidad } : i)));
+          return true;
         }}
         onRemove={(cod) => setCart((c) => c.filter((i) => i.codigo !== cod))}
         onClear={() => setPendiente({})}

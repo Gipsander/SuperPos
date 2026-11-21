@@ -334,3 +334,46 @@ test('dirección requerida, contacto alternativo opcional y registros antiguos c
   assert.equal(restored.buscarCliente(restored.getState(), '12.345.678').apellidos, 'Anterior');
   assert.equal(restored.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }], 'tarjeta', 'Luis', undefined, 'V-12345678').ok, true);
 });
+
+test('tasa del día: valor por defecto, solo admin, validación y se guarda en la venta', () => {
+  assert.equal(store.getState().exchangeRate, 45);
+  const cajero = store.getState().usuarios.find((u) => u.username === 'luis');
+  assert.equal(store.setExchangeRate(cajero, 50).ok, false);
+  assert.equal(store.setExchangeRate(admin(), 0).ok, false);
+  assert.equal(store.setExchangeRate(admin(), -3).ok, false);
+  assert.equal(store.setExchangeRate(admin(), 52.5).ok, true);
+  assert.equal(store.getState().exchangeRate, 52.5);
+  const e = store.getState().existencias.find((x) => x.sedeId === 's1' && x.habilitado && x.cantidad > 3);
+  const p = store.getState().productos.find((x) => x.codigo === e.productoCodigo);
+  const r = store.registrarVenta('s1', [{ codigo: p.codigo, cantidad: 1 }], 'tarjeta', 'Luis');
+  assert.equal(r.ok, true);
+  assert.equal(r.venta.tasa, 52.5);
+});
+
+test('sedes: activar/desactivar y eliminar solo sedes sin historial', () => {
+  const nueva = store.guardarSede(admin(), branch);
+  assert.equal(nueva.ok, true);
+  // Sede con ventas e historial: no se elimina, se sugiere desactivar.
+  const rechazo = store.eliminarSede(admin(), 's1');
+  assert.equal(rechazo.ok, false);
+  assert.match(rechazo.error, /Desactívala/);
+  assert.ok(store.getState().sedes.some((s) => s.id === 's1'));
+  // Alternar activa.
+  assert.equal(store.setSedeActiva(admin(), 's2', false).ok, true);
+  assert.equal(store.getState().sedes.find((s) => s.id === 's2').activa, false);
+  assert.equal(store.setSedeActiva(admin(), 's2', true).ok, true);
+  // Con stock, la sede nueva ya no es eliminable.
+  const cajero = store.getState().usuarios.find((u) => u.username === 'luis');
+  assert.equal(store.eliminarSede(cajero, nueva.id).ok, false);
+  const producto = store.getState().productos[0].codigo;
+  store.habilitarEnSede(nueva.id, producto, true);
+  assert.equal(store.registrarEntrada(nueva.id, producto, 5, 'prueba').ok, true);
+  assert.equal(store.eliminarSede(admin(), nueva.id).ok, false);
+});
+
+test('sede creada por error sin actividad se elimina junto con sus existencias vacías', () => {
+  const nueva = store.guardarSede(admin(), branch);
+  assert.equal(store.eliminarSede(admin(), nueva.id).ok, true);
+  assert.equal(store.getState().sedes.some((s) => s.id === nueva.id), false);
+  assert.equal(store.getState().existencias.some((e) => e.sedeId === nueva.id), false);
+});

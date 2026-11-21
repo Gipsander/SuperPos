@@ -13,6 +13,7 @@ import { CLIENTES_DEMO } from './clientes-demo';
 // Regla de alerta: agotado si cantidad = 0; stock bajo si cantidad < stockMinimo.
 
 const KEY = 'superpos.store.v2';
+export const TASA_POR_DEFECTO = 45;
 
 export const SEDES: Sede[] = [
   { id: 's1', codigo: 'CENTRO', nombre: 'Sede Centro', estado: 'Lara', ciudad: 'Barquisimeto', direccion: 'Av. 20, sector Centro', activa: true },
@@ -127,7 +128,7 @@ function seed(): StoreState {
       }
     }
   }
-  return { clientes: structuredClone(CLIENTES_DEMO), clientesDemoVersion: 1, usuarios: structuredClone(USUARIOS_DEMO), sedes: structuredClone(SEDES), productos, existencias, movimientos, historialPrecios: [], ventas, seq: 2000 };
+  return { exchangeRate: TASA_POR_DEFECTO, clientes: structuredClone(CLIENTES_DEMO), clientesDemoVersion: 1, usuarios: structuredClone(USUARIOS_DEMO), sedes: structuredClone(SEDES), productos, existencias, movimientos, historialPrecios: [], ventas, seq: 2000 };
 }
 
 /** Datos guardados con la nomenclatura anterior (P-001…P-024 para todo): recodifica por categoría en todas las referencias. */
@@ -164,6 +165,7 @@ function load(): StoreState {
             direccion: s.direccion ?? base?.direccion ?? '', activa: s.activa ?? true };
         });
         data.clientes ??= [];
+        if (!Number.isFinite(data.exchangeRate) || data.exchangeRate <= 0) data.exchangeRate = TASA_POR_DEFECTO;
         // Una sola incorporación: nunca reemplaza clientes ni restaura ejemplos ya corregidos.
         if (!data.clientesDemoVersion) {
           for (const cliente of CLIENTES_DEMO) {
@@ -303,6 +305,50 @@ export function guardarSede(actor: User, input: DatosSede, sedeId?: string): Res
       d.productos.forEach((p) => d.existencias.push({ sedeId: id, productoCodigo: p.codigo, cantidad: 0, stockMinimo: 5, habilitado: false }));
     }
     return { ok: true, id };
+  });
+}
+
+/** Una sede solo se puede eliminar si nunca tuvo actividad: sin ventas, movimientos, stock ni usuarios. */
+export function motivoNoEliminable(d: StoreState, sedeId: string): string | null {
+  if (d.ventas.some((v) => v.sedeId === sedeId)) return 'Tiene ventas registradas.';
+  if (d.movimientos.some((m) => m.sedeId === sedeId)) return 'Tiene movimientos de inventario.';
+  if (d.existencias.some((e) => e.sedeId === sedeId && e.cantidad > 0)) return 'Tiene existencias en stock.';
+  if (d.usuarios.some((u) => u.sedeId === sedeId)) return 'Tiene usuarios asignados.';
+  return null;
+}
+
+export function setSedeActiva(actor: User, sedeId: string, activa: boolean): Result {
+  return mutate((d) => {
+    if (!esAdministrador(d, actor)) return fail('Solo el administrador puede gestionar sedes.');
+    const sede = d.sedes.find((s) => s.id === sedeId);
+    if (!sede) return fail('La sede no existe.');
+    if (!activa && !d.sedes.some((s) => s !== sede && s.activa)) return fail('Debe quedar al menos una sede activa.');
+    sede.activa = activa;
+    return { ok: true };
+  });
+}
+
+/** Elimina una sede creada por error. Con historial se rechaza y se sugiere desactivarla. */
+export function eliminarSede(actor: User, sedeId: string): Result {
+  return mutate((d) => {
+    if (!esAdministrador(d, actor)) return fail('Solo el administrador puede gestionar sedes.');
+    const i = d.sedes.findIndex((s) => s.id === sedeId);
+    if (i < 0) return fail('La sede no existe.');
+    const motivo = motivoNoEliminable(d, sedeId);
+    if (motivo) return fail(`No se puede eliminar: ${motivo} Desactívala para conservar el historial y los reportes.`);
+    if (d.sedes[i].activa && !d.sedes.some((s) => s !== d.sedes[i] && s.activa)) return fail('Debe quedar al menos una sede activa.');
+    d.sedes.splice(i, 1);
+    d.existencias = d.existencias.filter((e) => e.sedeId !== sedeId);
+    return { ok: true };
+  });
+}
+
+export function setExchangeRate(actor: User, tasa: number): Result {
+  return mutate((d) => {
+    if (!esAdministrador(d, actor)) return fail('Solo el administrador puede cambiar la tasa del día.');
+    if (!Number.isFinite(tasa) || tasa <= 0 || tasa > 1e7) return fail('La tasa debe ser un número mayor a 0.');
+    d.exchangeRate = Math.round(tasa * 100) / 100;
+    return { ok: true };
   });
 }
 
@@ -530,7 +576,7 @@ export function registrarVenta(
       const error = aplicarSalida(d, sedeId, it.codigo, it.cantidad, 'Venta POS / Caja');
       if (error) return fail(error);
     }
-    const venta: Venta = { id: `V-${d.seq++}`, sedeId, fecha: new Date().toISOString(), items, total, metodo, cajero, ...(cliente ? { cliente: { ...cliente } } : {}), ...(metodo === 'efectivo' ? { recibido } : {}) };
+    const venta: Venta = { id: `V-${d.seq++}`, sedeId, fecha: new Date().toISOString(), items, total, metodo, cajero, ...(cliente ? { cliente: { ...cliente } } : {}), ...(metodo === 'efectivo' ? { recibido } : {}), tasa: d.exchangeRate };
     d.ventas.push(venta);
     return { ok: true, venta };
   });

@@ -6,6 +6,7 @@ import type { User } from '@/lib/types';
 import { getHistorialPrecios, getProducto, setPrecioGlobal, useStore } from '@/lib/store';
 import { coincideCodigoBarras } from '@/lib/pos';
 import { cx, fechaHora, money, norm } from '@/lib/format';
+import { Dual } from '@/components/ui/money';
 import { Button } from '@/components/ui/button';
 import { ErrorBox, Field, Input, SearchBox, Toolbar } from '@/components/ui/form';
 import { Box, EmptyState, PageHeading, Sub, TableWrap, numCls, tdCls, thCls } from '@/components/ui/layout';
@@ -61,7 +62,7 @@ export function PricesPanel({ user }: { user: User }) {
                     <Sub>{p.codigo}{p.codigoBarras ? ` · Barras: ${p.codigoBarras}` : ''}{p.activo ? '' : ' · inactivo'}</Sub>
                   </th>
                   <td className={tdCls}>{p.categoria}</td>
-                  <td className={cx(tdCls, numCls)}><strong className="text-strong">{money(p.precioGlobal)}</strong> <span className="text-xs text-muted">/ {p.unidadMedida}</span></td>
+                  <td className={cx(tdCls, numCls)}><strong className="text-strong"><Dual usd={p.precioGlobal} /></strong> <span className="text-xs text-muted">/ {p.unidadMedida}</span></td>
                   {isAdmin && (
                     <td className={cx(tdCls, 'text-right whitespace-nowrap')}>
                       <Button small onClick={() => setEditar(p.codigo)} aria-label={`Cambiar precio de ${p.nombre}`}><TagIcon aria-hidden="true" />Cambiar precio</Button>

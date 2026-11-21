@@ -1,7 +1,7 @@
 'use client';
 import { Printer } from 'lucide-react';
 import type { Venta } from '@/lib/types';
-import { asset, fechaHora, money, num } from '@/lib/format';
+import { asset, bs, fechaHora, money, num } from '@/lib/format';
 import { importeLinea } from '@/lib/pos';
 import { getSede, useStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { metodoLabel } from './payment-method-selector';
 /** Recibo virtual de la venta confirmada (se puede imprimir). */
 export function ReceiptModal({ venta, onClose }: { venta: Venta; onClose: () => void }) {
   const state = useStore();
+  const tasa = venta.tasa ?? state.exchangeRate;
   return (
     <Modal title="Venta registrada" onClose={onClose} printable>
       <div className="flex flex-col gap-3 text-[13px]">
@@ -26,17 +27,18 @@ export function ReceiptModal({ venta, onClose }: { venta: Venta; onClose: () => 
           {venta.items.map((it) => (
             <li key={it.codigo} className="flex justify-between gap-3">
               <span>{num(it.cantidad)} × {it.nombre}<span className="block text-xs text-muted">{money(it.precio)} / {it.unidadMedida}</span></span>
-              <span className="tabular-nums">{money(importeLinea(it.precio, it.cantidad))}</span>
+              <span className="text-right tabular-nums">{money(importeLinea(it.precio, it.cantidad))}<span className="block text-xs text-muted">{bs(importeLinea(it.precio, it.cantidad), tasa)}</span></span>
             </li>
           ))}
         </ul>
         <dl className="m-0 flex flex-col gap-1 border-t border-dashed border-edge pt-3">
-          <div className="flex justify-between text-base"><dt className="font-bold text-strong">Total</dt><dd className="m-0 font-bold text-strong tabular-nums">{money(venta.total)}</dd></div>
+          <div className="flex justify-between text-base"><dt className="font-bold text-strong">Total</dt><dd className="m-0 text-right font-bold text-strong tabular-nums">{money(venta.total)}<span className="block text-sm font-semibold text-brand-dark">{bs(venta.total, tasa)}</span></dd></div>
+          <div className="flex justify-between text-xs text-muted"><dt>Tasa del día</dt><dd className="m-0">Bs. {tasa.toLocaleString('es-VE', { minimumFractionDigits: 2 })} / $</dd></div>
           <div className="flex justify-between"><dt>Método de pago</dt><dd className="m-0">{metodoLabel(venta.metodo)}</dd></div>
           {venta.recibido !== undefined && (
             <>
-              <div className="flex justify-between"><dt>Recibido</dt><dd className="m-0 tabular-nums">{money(venta.recibido)}</dd></div>
-              <div className="flex justify-between"><dt>Cambio</dt><dd className="m-0 tabular-nums">{money(venta.recibido - venta.total)}</dd></div>
+              <div className="flex justify-between"><dt>Recibido</dt><dd className="m-0 text-right tabular-nums">{money(venta.recibido)}<span className="block text-xs text-muted">{bs(venta.recibido, tasa)}</span></dd></div>
+              <div className="flex justify-between"><dt>Vuelto</dt><dd className="m-0 text-right tabular-nums">{money(venta.recibido - venta.total)}<span className="block text-xs text-muted">{bs(venta.recibido - venta.total, tasa)}</span></dd></div>
             </>
           )}
         </dl>

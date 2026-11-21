@@ -81,9 +81,13 @@ export interface Venta {
   metodo: MetodoPago;
   cajero: string;
   recibido?: number;
+  /** Tasa Bs/$ vigente al cobrar; conserva el equivalente histórico del recibo. */
+  tasa?: number;
 }
 
 export interface StoreState {
+  /** Tasa del día en bolívares por dólar. */
+  exchangeRate: number;
   clientesDemoVersion?: number;
   clientes: Cliente[];
   usuarios: CuentaDemo[];
