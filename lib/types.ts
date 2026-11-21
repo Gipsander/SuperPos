@@ -86,8 +86,8 @@ export interface Venta {
 }
 
 export interface StoreState {
-  /** Tasa del día en bolívares por dólar. */
-  exchangeRate: number;
+  /** Tasa Bs/$ por día (clave yyyy-mm-dd, hora local). Los días anteriores no se modifican. */
+  tasas: Record<string, number>;
   clientesDemoVersion?: number;
   clientes: Cliente[];
   usuarios: CuentaDemo[];

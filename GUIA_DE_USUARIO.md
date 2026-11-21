@@ -45,7 +45,7 @@ flowchart TD
     end
 
     subgraph P3["📊 PROCESO 3: REPORTES Y ADMINISTRACIÓN"]
-        R0["3.0 Tasa del día\n(Bs. por $, editable por rafael)"] --> R1["3.1 Dashboard en $ y Bs.\n(Por Día o Semanal)"]
+        R0["3.0 Tasa de cada día\n(hoy editable; días anteriores cerrados)"] --> R1["3.1 Dashboard en $ y Bs.\n(Por Día o Semanal)"]
         R1 --> R2["3.2 Cálculo de Rendimiento\n(Empleado de la Semana)"]
     end
 
@@ -75,7 +75,14 @@ SuperPOS es un sistema **Offline-First (Local)**. Funciona de manera 100% privad
 ### 💱 Moneda: precios en $ (USD) con equivalente en Bs.
 * Los precios base de los productos siempre se guardan en **dólares ($)**.
 * Todo el sistema muestra **ambos montos a la vez** (ej. `$10.00` y `Bs. 450,00`): Catálogo, Precios, Inventario, Caja (lista de productos, carrito, total a cobrar y vuelto), recibo y Reportes.
-* La **Tasa del Día (Bs. / $)** vale `45,00` por defecto y solo la modifica `rafael` en **Reportes** (campo *Tasa del día*). El cambio se aplica al instante. Cada recibo conserva la tasa vigente al momento de cobrar.
+* Cada día tiene su **propia Tasa (Bs. / $)**. Vale `45,00` por defecto y un día nuevo **hereda la tasa más reciente** hasta que `rafael` la ajuste.
+* Solo `rafael` puede cambiar la tasa, en **Reportes** (campo *Tasa hoy*), y **solo la de hoy**: el cambio se aplica al instante en todo el sistema. La tasa de los **días anteriores queda cerrada** (solo lectura), así los reportes históricos no se alteran.
+* Cada venta y cada recibo conservan la tasa con la que se cobraron.
+
+| Día | ¿Se puede editar su tasa? | Qué tasa usan Caja, Catálogo e Inventario |
+| :--- | :---: | :--- |
+| Hoy | ✅ (`rafael`, todo el día) | La de hoy |
+| Días anteriores | ❌ (cerrado) | No aplica; Reportes usa la tasa de cada venta |
 
 ---
 
@@ -182,7 +189,7 @@ El módulo de caja está diseñado para **alta velocidad**: cada acción tiene u
 
 1. Vaya a **Reportes** (o Inicio).
 2. Observe el Dashboard financiero. Cada venta realizada por los cajeros actualiza estos gráficos en tiempo real. Los montos se muestran en `$` y su equivalente en `Bs.`
-3. **Tasa del Día:** en la cabecera del panel, edite el campo **Tasa del día (Bs. / $)**. El cambio es inmediato en todo el sistema.
+3. **Tasa del Día:** en la cabecera del panel, edite el campo **Tasa hoy (Bs. / $)**. El cambio es inmediato en todo el sistema. Al elegir otra fecha en *Por Día*, el campo muestra la tasa de ese día en solo lectura (*Día cerrado*).
 4. **Filtro de gráficas:** elija **`Por Día`** o **`Semanal (Últimos 7 días)`**. En *Por Día* aparece un selector de fecha (por defecto, hoy) que filtra las métricas, las ventas listadas y las gráficas, mostrando las ventas **por hora** de esa fecha.
 5. **Gestión de Clientes:** En el menú **Clientes**, consulte el listado de clientes registrados y modifique sus datos si es necesario.
 6. **Módulo "Empleado de la Semana":** El sistema calcula automáticamente el volumen total ($) vendido por cada cajero en los últimos 7 días y otorga una medalla destacada al cajero con mayor recaudación.
@@ -205,7 +212,8 @@ Tabla de pruebas diseñada para que el evaluador compruebe la calidad del sistem
 | **V7** | **Alta de Sedes** | Con `rafael`, en Sedes presionar `Crear sede` y guardar una sede nueva. | La sede aparece en el listado sin productos habilitados ni existencias. |
 | **V8** | **Alta de Usuarios** | En Usuarios y roles, crear un usuario Cajero y asignarle la sede nueva. Iniciar sesión con él. | Solo puede operar la Caja y únicamente en su sede asignada. |
 | **V9** | **Modificación de Precios** | Con `rafael`, en Precios usar `Cambiar precio` sobre un producto. Luego entrar con `gipsander`. | El nuevo precio aparece en el historial y en todas las sedes; `gipsander` lo ve en solo lectura, sin botón de cambio. |
-| **V10** | **Tasa Bimoneda** | Con `rafael`, en Reportes cambiar la tasa de `45` a `50`. Luego abrir Caja, Catálogo e Inventario. | Todos los precios muestran `$` y `Bs.` con la nueva tasa al instante. |
+| **V10** | **Tasa Bimoneda** | Con `rafael`, en Reportes cambiar la tasa de hoy de `45` a `50`. Luego abrir Caja, Catálogo e Inventario. | Todos los precios muestran `$` y `Bs.` con la nueva tasa al instante. |
+| **V10b** | **Tasa por día** | En Reportes elegir `Por Día` y una fecha anterior. | El campo de tasa aparece en solo lectura (*Día cerrado*) y los Bs. de esas ventas no cambian al editar la tasa de hoy. |
 | **V11** | **Cliente antes de operar** | Con `luis`, abrir Caja sin identificar a nadie. | El área de productos está bloqueada y aparece el aviso para seleccionar un cliente. |
 | **V12** | **Directorio de clientes** | En Caja presionar `Ver todos los clientes`, buscar por cédula o nombre y `Seleccionar`. | El cliente queda activo y la caja se desbloquea. |
 | **V13** | **Orden y alerta de stock** | Agregar dos productos y luego intentar sumar más unidades que las existentes. | El último producto queda arriba; aparece el banner rojo de stock insuficiente. |

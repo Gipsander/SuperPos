@@ -5,7 +5,7 @@ import { Pencil, Plus, SearchX } from 'lucide-react';
 import type { Producto, User } from '@/lib/types';
 import {
   CATEGORIAS, UNIDADES, actualizarProducto, crearProducto, getExistencia, getProducto, getSede, habilitarEnSede,
-  sedesDeUsuario, sedesHabilitadas, setActivo, siguienteCodigo, useStore,
+  sedesDeUsuario, sedesHabilitadas, setActivo, siguienteCodigo, tasaHoy, useStore,
 } from '@/lib/store';
 import { coincideCodigoBarras } from '@/lib/pos';
 import { bs, cx, norm } from '@/lib/format';
@@ -223,7 +223,7 @@ export function ProductForm({ codigo, onClose, sedeInicial }: { codigo: string |
           <Field label="Unidad de medida">
             {(id) => <Select id={id} value={f.unidadMedida} onChange={(e) => set('unidadMedida', e.target.value)}>{UNIDADES.map((u) => <option key={u}>{u}</option>)}</Select>}
           </Field>
-          {!editando && <Field label="Precio global (USD)" hint={Number(f.precio) > 0 ? `Equivale a ${bs(Number(f.precio), state.exchangeRate)} (tasa ${state.exchangeRate.toLocaleString('es-VE', { minimumFractionDigits: 2 })})` : undefined}>{(id, desc) => <Input id={id} aria-describedby={desc} type="number" min={0} step={0.01} inputMode="decimal" placeholder="0.00" value={f.precio} onChange={(e) => set('precio', e.target.value)} />}</Field>}
+          {!editando && <Field label="Precio global (USD)" hint={Number(f.precio) > 0 ? `Equivale a ${bs(Number(f.precio), tasaHoy(state))} (tasa ${tasaHoy(state).toLocaleString('es-VE', { minimumFractionDigits: 2 })})` : undefined}>{(id, desc) => <Input id={id} aria-describedby={desc} type="number" min={0} step={0.01} inputMode="decimal" placeholder="0.00" value={f.precio} onChange={(e) => set('precio', e.target.value)} />}</Field>}
         </div>
         {editando && <p className="m-0 text-[13px] text-muted">El precio global se modifica desde la sección Precios.</p>}
         <fieldset className="rounded-[10px] border border-line px-3.5 py-3">

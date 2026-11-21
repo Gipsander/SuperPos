@@ -15,6 +15,10 @@ import { CLIENTES_DEMO } from './clientes-demo';
 const KEY = 'superpos.store.v2';
 export const TASA_POR_DEFECTO = 45;
 
+/** Clave de día yyyy-mm-dd en hora local. */
+export const claveDia = (d: Date = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 export const SEDES: Sede[] = [
   { id: 's1', codigo: 'CENTRO', nombre: 'Sede Centro', estado: 'Lara', ciudad: 'Barquisimeto', direccion: 'Av. 20, sector Centro', activa: true },
   { id: 's2', codigo: 'NORTE', nombre: 'Sede Norte', estado: 'Lara', ciudad: 'Barquisimeto', direccion: 'Av. Intercomunal, sector Norte', activa: true },
@@ -128,7 +132,9 @@ function seed(): StoreState {
       }
     }
   }
-  return { exchangeRate: TASA_POR_DEFECTO, clientes: structuredClone(CLIENTES_DEMO), clientesDemoVersion: 1, usuarios: structuredClone(USUARIOS_DEMO), sedes: structuredClone(SEDES), productos, existencias, movimientos, historialPrecios: [], ventas, seq: 2000 };
+  const tasas: Record<string, number> = {};
+  for (let d = 0; d < 7; d++) tasas[claveDia(new Date(base - d * 86400e3))] = TASA_POR_DEFECTO;
+  return { tasas, clientes: structuredClone(CLIENTES_DEMO), clientesDemoVersion: 1, usuarios: structuredClone(USUARIOS_DEMO), sedes: structuredClone(SEDES), productos, existencias, movimientos, historialPrecios: [], ventas, seq: 2000 };
 }
 
 /** Datos guardados con la nomenclatura anterior (P-001…P-024 para todo): recodifica por categoría en todas las referencias. */
@@ -165,7 +171,15 @@ function load(): StoreState {
             direccion: s.direccion ?? base?.direccion ?? '', activa: s.activa ?? true };
         });
         data.clientes ??= [];
-        if (!Number.isFinite(data.exchangeRate) || data.exchangeRate <= 0) data.exchangeRate = TASA_POR_DEFECTO;
+        if (!data.tasas || typeof data.tasas !== 'object') {
+          // Datos con una sola tasa global: cada día con ventas conserva esa tasa y hoy parte de ella.
+          const vieja = Number((data as unknown as { exchangeRate?: number }).exchangeRate);
+          const base = Number.isFinite(vieja) && vieja > 0 ? vieja : TASA_POR_DEFECTO;
+          data.tasas = {};
+          data.ventas.forEach((v) => { data.tasas[claveDia(new Date(v.fecha))] ??= base; });
+          data.tasas[claveDia()] ??= base;
+          delete (data as unknown as { exchangeRate?: number }).exchangeRate;
+        }
         // Una sola incorporación: nunca reemplaza clientes ni restaura ejemplos ya corregidos.
         if (!data.clientesDemoVersion) {
           for (const cliente of CLIENTES_DEMO) {
@@ -343,11 +357,28 @@ export function eliminarSede(actor: User, sedeId: string): Result {
   });
 }
 
+/**
+ * Tasa vigente de un día: la propia si existe; si no, la del último día anterior registrado
+ * (así un día nuevo arranca con la tasa más reciente), o la siguiente registrada, o la de por defecto.
+ */
+export function tasaDelDia(s: Pick<StoreState, 'tasas'>, clave: string = claveDia()): number {
+  const exacta = s.tasas[clave];
+  if (exacta) return exacta;
+  const claves = Object.keys(s.tasas).sort();
+  const previa = [...claves].reverse().find((k) => k < clave);
+  const siguiente = claves.find((k) => k > clave);
+  return s.tasas[previa ?? siguiente ?? ''] ?? TASA_POR_DEFECTO;
+}
+export const tasaHoy = (s: Pick<StoreState, 'tasas'>) => tasaDelDia(s, claveDia());
+/** Tasa con la que se cobró la venta (o la de su día, en datos antiguos). */
+export const tasaDeVenta = (s: Pick<StoreState, 'tasas'>, v: Pick<Venta, 'tasa' | 'fecha'>) => v.tasa ?? tasaDelDia(s, claveDia(new Date(v.fecha)));
+
+/** Solo se puede fijar la tasa de HOY; la de los días anteriores queda cerrada. */
 export function setExchangeRate(actor: User, tasa: number): Result {
   return mutate((d) => {
     if (!esAdministrador(d, actor)) return fail('Solo el administrador puede cambiar la tasa del día.');
     if (!Number.isFinite(tasa) || tasa <= 0 || tasa > 1e7) return fail('La tasa debe ser un número mayor a 0.');
-    d.exchangeRate = Math.round(tasa * 100) / 100;
+    d.tasas[claveDia()] = Math.round(tasa * 100) / 100;
     return { ok: true };
   });
 }
@@ -576,7 +607,7 @@ export function registrarVenta(
       const error = aplicarSalida(d, sedeId, it.codigo, it.cantidad, 'Venta POS / Caja');
       if (error) return fail(error);
     }
-    const venta: Venta = { id: `V-${d.seq++}`, sedeId, fecha: new Date().toISOString(), items, total, metodo, cajero, ...(cliente ? { cliente: { ...cliente } } : {}), ...(metodo === 'efectivo' ? { recibido } : {}), tasa: d.exchangeRate };
+    const venta: Venta = { id: `V-${d.seq++}`, sedeId, fecha: new Date().toISOString(), items, total, metodo, cajero, ...(cliente ? { cliente: { ...cliente } } : {}), ...(metodo === 'efectivo' ? { recibido } : {}), tasa: tasaHoy(d) };
     d.ventas.push(venta);
     return { ok: true, venta };
   });

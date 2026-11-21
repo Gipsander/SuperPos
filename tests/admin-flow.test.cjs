@@ -336,13 +336,13 @@ test('dirección requerida, contacto alternativo opcional y registros antiguos c
 });
 
 test('tasa del día: valor por defecto, solo admin, validación y se guarda en la venta', () => {
-  assert.equal(store.getState().exchangeRate, 45);
+  assert.equal(store.tasaHoy(store.getState()), 45);
   const cajero = store.getState().usuarios.find((u) => u.username === 'luis');
   assert.equal(store.setExchangeRate(cajero, 50).ok, false);
   assert.equal(store.setExchangeRate(admin(), 0).ok, false);
   assert.equal(store.setExchangeRate(admin(), -3).ok, false);
   assert.equal(store.setExchangeRate(admin(), 52.5).ok, true);
-  assert.equal(store.getState().exchangeRate, 52.5);
+  assert.equal(store.tasaHoy(store.getState()), 52.5);
   const e = store.getState().existencias.find((x) => x.sedeId === 's1' && x.habilitado && x.cantidad > 3);
   const p = store.getState().productos.find((x) => x.codigo === e.productoCodigo);
   const r = store.registrarVenta('s1', [{ codigo: p.codigo, cantidad: 1 }], 'tarjeta', 'Luis');
@@ -376,4 +376,42 @@ test('sede creada por error sin actividad se elimina junto con sus existencias v
   assert.equal(store.eliminarSede(admin(), nueva.id).ok, true);
   assert.equal(store.getState().sedes.some((s) => s.id === nueva.id), false);
   assert.equal(store.getState().existencias.some((e) => e.sedeId === nueva.id), false);
+});
+
+test('tasa por día: hoy editable, días anteriores intactos y día nuevo hereda la última tasa', () => {
+  const hoy = store.claveDia();
+  const ayer = store.claveDia(new Date(Date.now() - 86400e3));
+  assert.equal(store.tasaDelDia(store.getState(), ayer), 45);
+  assert.equal(store.setExchangeRate(admin(), 60).ok, true);
+  const s = store.getState();
+  assert.equal(s.tasas[hoy], 60);
+  assert.equal(store.tasaDelDia(s, ayer), 45, 'el día anterior no cambia');
+  // Un día sin tasa propia usa la del último día anterior registrado.
+  const manana = store.claveDia(new Date(Date.now() + 86400e3));
+  assert.equal(store.tasaDelDia(s, manana), 60);
+  // Ventas antiguas sin tasa guardada usan la de su día, no la de hoy.
+  const vieja = s.ventas.find((v) => store.claveDia(new Date(v.fecha)) === ayer);
+  if (vieja) assert.equal(store.tasaDeVenta(s, { fecha: vieja.fecha }), 45);
+  // Una venta nueva conserva la tasa de hoy aunque luego cambie.
+  const e = s.existencias.find((x) => x.sedeId === 's1' && x.habilitado && x.cantidad > 3);
+  const r = store.registrarVenta('s1', [{ codigo: e.productoCodigo, cantidad: 1 }], 'tarjeta', 'Luis');
+  assert.equal(r.venta.tasa, 60);
+  store.setExchangeRate(admin(), 70);
+  assert.equal(store.getState().ventas.find((v) => v.id === r.venta.id).tasa, 60);
+});
+
+test('migración: tasa global antigua se reparte por día sin alterar el histórico', () => {
+  const crudo = structuredClone(store.getState());
+  delete crudo.tasas; crudo.exchangeRate = 48;
+  saved.set('superpos.store.v2', JSON.stringify(crudo));
+  // Recarga el módulo con almacenamiento previo.
+  const rutaStore = require.resolve(storePath);
+  delete require.cache[rutaStore];
+  const recargado = require(storePath);
+  const s = recargado.getState();
+  assert.equal(s.exchangeRate, undefined);
+  assert.equal(recargado.tasaHoy(s), 48);
+  s.ventas.forEach((v) => assert.equal(recargado.tasaDeVenta(s, v), 48));
+  delete require.cache[rutaStore];
+  require(storePath);
 });

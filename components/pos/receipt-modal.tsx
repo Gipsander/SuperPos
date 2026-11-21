@@ -3,7 +3,7 @@ import { Printer } from 'lucide-react';
 import type { Venta } from '@/lib/types';
 import { asset, bs, fechaHora, money, num } from '@/lib/format';
 import { importeLinea } from '@/lib/pos';
-import { getSede, useStore } from '@/lib/store';
+import { getSede, tasaDeVenta, useStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { metodoLabel } from './payment-method-selector';
@@ -11,7 +11,7 @@ import { metodoLabel } from './payment-method-selector';
 /** Recibo virtual de la venta confirmada (se puede imprimir). */
 export function ReceiptModal({ venta, onClose }: { venta: Venta; onClose: () => void }) {
   const state = useStore();
-  const tasa = venta.tasa ?? state.exchangeRate;
+  const tasa = tasaDeVenta(state, venta);
   return (
     <Modal title="Venta registrada" onClose={onClose} printable>
       <div className="flex flex-col gap-3 text-[13px]">
