@@ -3,14 +3,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Download, PackageSearch } from 'lucide-react';
 import type { EstadoStock, FilaStock } from '@/lib/types';
-import { getExistencia, getProducto, getSede, getStock, registrarEntrada, faltan, useStore } from '@/lib/store';
+import { getStock, registrarEntrada, useStore } from '@/lib/store';
 import { coincideCodigoBarras } from '@/lib/pos';
-import { cx, money, norm, num } from '@/lib/format';
+import { cx, norm, num } from '@/lib/format';
+import { Dual } from '@/components/ui/money';
+import { SaveButton } from '@/components/ui/save-button';
 import { Button } from '@/components/ui/button';
 import { Falta, StockBadge } from '@/components/ui/badge';
-import { CategorySelect, Chip, ErrorBox, Field, Input, SearchBox, Toolbar } from '@/components/ui/form';
+import { CategorySelect, Chip, Input, SearchBox, Toolbar } from '@/components/ui/form';
 import { EmptyState, StatCard, Sub, TableWrap, numCls, tdCls, thCls } from '@/components/ui/layout';
-import { Modal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 
 type Filtro = 'todos' | EstadoStock;
@@ -31,7 +32,6 @@ export function TabStock({ sedeId }: { sedeId: string }) {
   const [cat, setCat] = useState('');
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [flash, setFlash] = useState<string | null>(null);
-  const [ingreso, setIngreso] = useState<string | null>(null);
 
   useEffect(() => {
     if (!flash) return;
@@ -61,7 +61,7 @@ export function TabStock({ sedeId }: { sedeId: string }) {
       </div>
 
       <Toolbar>
-        <SearchBox value={q} onChange={setQ} placeholder="Buscar por nombre o código" />
+        <SearchBox value={q} onChange={setQ} label="Buscar en el inventario" placeholder="Buscar por nombre, código interno o código de barras (*1234)" />
         <CategorySelect value={cat} onChange={setCat} options={categorias} />
       </Toolbar>
 
@@ -72,13 +72,13 @@ export function TabStock({ sedeId }: { sedeId: string }) {
         <Chip active={filtro === 'ok'} count={n.ok} onClick={() => setFiltro('ok')}>Disponibles</Chip>
       </div>
 
-      <TableWrap caption="Existencias de la sede seleccionada">
+      <TableWrap caption="Existencias de la sede seleccionada" minWidth={980}>
         <thead>
           <tr>
             <th scope="col" className={thCls}>Producto</th><th scope="col" className={thCls}>Categoría</th>
             <th scope="col" className={cx(thCls, numCls)}>Precio global</th><th scope="col" className={cx(thCls, numCls)}>Existencia</th>
             <th scope="col" className={cx(thCls, numCls)}>Mínimo</th><th scope="col" className={cx(thCls, numCls)}>Faltan</th>
-            <th scope="col" className={thCls}>Estado</th><th scope="col" className={thCls}><span className="sr-only">Acciones</span></th>
+            <th scope="col" className={thCls}>Estado</th><th scope="col" className={cx(thCls, numCls)}>Ingresar mercancía</th>
           </tr>
         </thead>
         <tbody>
@@ -97,62 +97,47 @@ export function TabStock({ sedeId }: { sedeId: string }) {
                 <Sub>{r.productoCodigo}{r.producto.codigoBarras ? ` · Barras: ${r.producto.codigoBarras}` : ''}</Sub>
               </th>
               <td className={tdCls}>{r.producto.categoria}</td>
-              <td className={cx(tdCls, numCls)}>{money(r.producto.precioGlobal)}</td>
+              <td className={cx(tdCls, numCls)}><Dual usd={r.producto.precioGlobal} /></td>
               <td className={cx(tdCls, numCls)}><strong className="text-strong">{num(r.cantidad)}</strong> <span className="text-xs text-muted">{r.producto.unidadMedida}</span></td>
               <td className={cx(tdCls, numCls)}>{num(r.stockMinimo)}</td>
               <td className={cx(tdCls, numCls)}><Falta estado={r.estado} n={r.faltan} /></td>
               <td className={tdCls}><StockBadge estado={r.estado} /></td>
-              <td className={cx(tdCls, 'text-right whitespace-nowrap')}>
-                <Button small onClick={() => setIngreso(r.productoCodigo)} aria-label={`Ingresar mercancía de ${r.producto.nombre}`}><Download aria-hidden="true" />Ingresar</Button>
+              <td className={cx(tdCls, 'text-right')}>
+                <IngresoFila sedeId={sedeId} r={r} onDone={setFlash} />
               </td>
             </tr>
           ))}
         </tbody>
       </TableWrap>
       <p role="status" className="mt-2.5 ml-0.5 text-[13px] text-muted">{list.length} de {rows.length} productos</p>
-      {ingreso && <IngresoModal sedeId={sedeId} codigo={ingreso} onClose={() => setIngreso(null)} onDone={setFlash} />}
     </>
   );
 }
 
-/** Ingreso rápido desde la fila del producto (F12). */
-function IngresoModal({ sedeId, codigo, onClose, onDone }: { sedeId: string; codigo: string; onClose: () => void; onDone: (codigo: string) => void }) {
-  const state = useStore();
+/** Ingreso directo en la fila (F12): escribe la cantidad y pulsa «Guardar Ingreso». */
+function IngresoFila({ sedeId, r, onDone }: { sedeId: string; r: FilaStock; onDone: (codigo: string) => void }) {
   const toast = useToast();
-  const e = getExistencia(state, sedeId, codigo);
-  const p = getProducto(state, codigo);
-  const falta = e ? faltan(e) : 0;
-  const [cant, setCant] = useState(falta ? String(falta) : '');
-  const [motivo, setMotivo] = useState('Recepción de proveedor');
+  const [cant, setCant] = useState('');
   const [error, setError] = useState('');
-  if (!e || !p) return null;
-
-  function submit(ev: React.FormEvent) {
-    ev.preventDefault();
-    const r = registrarEntrada(sedeId, codigo, cant, motivo);
-    if (!r.ok) { setError(r.error); return; }
-    onDone(codigo);
-    onClose();
-    toast(`${p!.nombre}: ${num(r.anterior)} → ${num(r.nueva)} ${p!.unidadMedida}`);
+  const kg = r.producto.unidadMedida === 'kg';
+  function guardar(): boolean {
+    const res = registrarEntrada(sedeId, r.productoCodigo, cant, 'Ingreso de mercancía');
+    if (!res.ok) { setError(res.error); return false; }
+    setCant(''); setError('');
+    onDone(r.productoCodigo);
+    toast(`${r.producto.nombre}: ${num(res.anterior)} → ${num(res.nueva)} ${r.producto.unidadMedida}`);
+    return true;
   }
   return (
-    <Modal title="Ingresar mercancía" onClose={onClose}>
-      <p className="mb-3.5">
-        <strong className="text-strong">{p.nombre}</strong> · {codigo}<br />
-        {getSede(state, sedeId)?.nombre} · Existencia actual: <strong>{num(e.cantidad)} {p.unidadMedida}</strong> · Mínimo: {num(e.stockMinimo)}
-        {falta > 0 && <> · <span className="font-bold text-warn">Faltan {num(falta)}</span></>}
-      </p>
-      <form onSubmit={submit} noValidate className="flex flex-col gap-3.5">
-        <Field label={`Cantidad recibida (${p.unidadMedida})`}>
-          {(id) => <Input id={id} type="number" min={1} step={1} inputMode="numeric" required value={cant} aria-invalid={!!error} onChange={(ev) => { setCant(ev.target.value); setError(''); }} />}
-        </Field>
-        <Field label="Motivo">{(id) => <Input id={id} maxLength={80} value={motivo} onChange={(ev) => setMotivo(ev.target.value)} />}</Field>
-        <ErrorBox message={error} />
-        <div className="mt-1.5 flex flex-wrap justify-end gap-2.5">
-          <Button onClick={onClose}>Cancelar</Button>
-          <Button type="submit" variant="primary">Registrar ingreso</Button>
-        </div>
-      </form>
-    </Modal>
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
+        <Input aria-label={`Cantidad recibida de ${r.producto.nombre}`} type="number" min={kg ? 0.001 : 1} step={kg ? 0.001 : 1} inputMode="decimal"
+          placeholder={r.faltan ? `Faltan ${num(r.faltan)}` : 'Cantidad'} className="min-h-9 w-28 px-2 py-1 text-right" value={cant} aria-invalid={!!error}
+          onChange={(e) => { setCant(e.target.value); setError(''); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.parentElement?.querySelector<HTMLButtonElement>('button')?.click(); } }} />
+        <SaveButton small onSave={guardar} savedText="Ingreso guardado"><Download aria-hidden="true" />Guardar Ingreso</SaveButton>
+      </div>
+      {error && <span role="alert" className="max-w-[260px] text-right text-xs font-semibold text-danger">{error}</span>}
+    </div>
   );
 }
