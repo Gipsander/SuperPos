@@ -284,6 +284,28 @@ export function eliminarUsuario(actor: User, username: string): Result {
   });
 }
 
+/** Solo se borran sedes sin dependencias; las sedes utilizadas se desactivan. */
+export function motivoBloqueoEliminarSede(d: StoreState, sedeId: string): string | null {
+  const sede = d.sedes.find((s) => s.id === sedeId);
+  if (!sede) return 'La sede no existe.';
+  if (sede.activa && !d.sedes.some((s) => s.id !== sedeId && s.activa)) return 'Debe quedar al menos una sede activa.';
+  if (d.usuarios.some((u) => u.sedeId === sedeId)) return 'Reasigna los usuarios de esta sede antes de eliminarla, incluso los inactivos.';
+  if (d.ventas.some((v) => v.sedeId === sedeId) || d.movimientos.some((m) => m.sedeId === sedeId)) return 'Esta sede tiene historial de ventas o inventario. Puedes desactivarla desde Editar sede para conservar esos registros.';
+  if (d.existencias.some((e) => e.sedeId === sedeId && e.cantidad !== 0)) return 'Esta sede tiene existencias. Puedes desactivarla desde Editar sede para conservar el inventario.';
+  return null;
+}
+
+export function eliminarSede(actor: User, sedeId: string): Result {
+  return mutate((d) => {
+    if (!esAdministrador(d, actor)) return fail('Solo el administrador puede eliminar sedes.');
+    const error = motivoBloqueoEliminarSede(d, sedeId);
+    if (error) return fail(error);
+    d.sedes = d.sedes.filter((s) => s.id !== sedeId);
+    d.existencias = d.existencias.filter((e) => e.sedeId !== sedeId);
+    return { ok: true };
+  });
+}
+
 export function guardarSede(actor: User, input: DatosSede, sedeId?: string): Result<{ id: string }> {
   return mutate((d) => {
     if (!esAdministrador(d, actor)) return fail('Solo el administrador puede gestionar sedes.');
@@ -442,6 +464,22 @@ export function habilitarEnSede(sedeId: string, codigo: string, habilitado: bool
   });
 }
 
+/** Aplica la selección filtrada completa o no cambia ningún producto. Conserva el stock. */
+export function habilitarProductosEnSede(actor: User, sedeId: string, codigos: string[], habilitado: boolean): Result {
+  return mutate((d) => {
+    if (!esAdministrador(d, actor)) return fail('Solo el administrador puede gestionar el catálogo.');
+    if (!d.sedes.some((s) => s.id === sedeId && s.activa)) return fail('La sede está inactiva o no existe.');
+    const seleccion = new Set(codigos);
+    if (!seleccion.size || [...seleccion].some((codigo) => !d.productos.some((p) => p.codigo === codigo))) return fail('Selecciona productos existentes.');
+    for (const codigo of seleccion) {
+      let e = findEx(d, sedeId, codigo);
+      if (!e) { e = { sedeId, productoCodigo: codigo, cantidad: 0, stockMinimo: 5, habilitado: false }; d.existencias.push(e); }
+      e.habilitado = habilitado;
+    }
+    return { ok: true };
+  });
+}
+
 /* ---------- Precio global (F07) ---------- */
 export function setPrecioGlobal(codigo: string, precio: number | string, usuario = 'sistema'): Result<{ anterior: number; nuevo: number }> {
   const nuevo = Math.round(Number(precio) * 100) / 100;
@@ -516,7 +554,7 @@ export function registrarVenta(
   return mutate((d) => {
     if (!lineas.length) return fail('El carrito está vacío.');
     const cliente = cedulaCliente ? buscarCliente(d, cedulaCliente) : undefined;
-    if (cedulaCliente && !cliente) return fail('El cliente no está registrado.');
+    if (!cliente) return fail('Selecciona un cliente registrado antes de cobrar.');
     if (!['efectivo', 'tarjeta', 'transferencia'].includes(metodo)) return fail('Método de pago inválido.');
     const items: VentaItem[] = [];
     for (const l of lineas) {

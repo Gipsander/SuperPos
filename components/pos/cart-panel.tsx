@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CreditCard, ScanBarcode, Trash2 } from 'lucide-react';
 import type { Cliente } from '@/lib/types';
 import { money, num } from '@/lib/format';
@@ -10,10 +10,15 @@ import { EmptyState } from '@/components/ui/layout';
 import { ProductIcon } from '@/components/ui/icons';
 import type { LineaCarrito } from './cart-line';
 
-export function CartPanel({ lineas, cliente, invalido, onChange, onRemove, onClear, onPay }: {
+export function CartPanel({ lineas, cliente, invalido, onChange, onRemove, onClear, onPay, onError }: {
   lineas: LineaCarrito[]; cliente: Cliente | null; invalido: boolean;
   onChange: (codigo: string, cantidad: number) => void; onRemove: (codigo: string) => void; onClear: () => void; onPay: () => void;
+  onError: (message: string) => void;
 }) {
+  const listaRef = useRef<HTMLDivElement>(null);
+  const primerCodigo = lineas[0]?.fila.productoCodigo;
+  const primeraCantidad = lineas[0]?.cantidad;
+  useEffect(() => { listaRef.current?.scrollTo({ top: 0 }); }, [primerCodigo, primeraCantidad]);
   const total = Math.round(lineas.reduce((t, l) => t + importeLinea(l.fila.producto.precioGlobal, l.cantidad), 0) * 100) / 100;
   return <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
     <section aria-labelledby="cart-title" className="min-w-0 overflow-hidden rounded-xl border border-line bg-white">
@@ -21,8 +26,8 @@ export function CartPanel({ lineas, cliente, invalido, onChange, onRemove, onCle
         <h2 id="cart-title" className="m-0 text-lg font-bold text-strong">Detalle de la venta</h2>
         <span className="rounded-full bg-soft px-3 py-1 text-xs font-semibold text-muted">{lineas.length} {lineas.length === 1 ? 'producto' : 'productos'}</span>
       </div>
-      {lineas.length === 0 ? <div className="grid min-h-[280px] place-items-center"><EmptyState title="Listo para una nueva venta" icon={ScanBarcode}>Escanea un código o usa Buscar producto para comenzar.</EmptyState></div> :
-        <div className="max-h-[48dvh] overflow-auto"><table className="w-full min-w-[580px] border-collapse text-sm">
+      {lineas.length === 0 ? <div className="grid min-h-[280px] place-items-center"><EmptyState title="Listo para una nueva venta" icon={ScanBarcode}>{cliente ? 'Busca un producto e indica la cantidad para comenzar.' : 'Identifica al cliente para comenzar.'}</EmptyState></div> :
+        <div ref={listaRef} className="max-h-[48dvh] overflow-auto"><table className="w-full min-w-[580px] border-collapse text-sm">
           <caption className="sr-only">Productos de la venta actual</caption>
           <thead className="sticky top-0 z-10 bg-soft text-xs text-muted"><tr>
             <th scope="col" className="px-4 py-3 text-left">Producto</th><th scope="col" className="px-3 py-3 text-right">Precio</th><th scope="col" className="px-3 py-3 text-center">Cantidad</th><th scope="col" className="px-3 py-3 text-right">Importe</th><th scope="col"><span className="sr-only">Eliminar</span></th>
@@ -30,7 +35,7 @@ export function CartPanel({ lineas, cliente, invalido, onChange, onRemove, onCle
           <tbody>{lineas.map((l) => <tr key={l.fila.productoCodigo} className="border-t border-line">
             <th scope="row" className="px-4 py-3 text-left font-normal"><ProductIcon nombre={l.fila.producto.nombre} categoria={l.fila.producto.categoria} className="float-left mr-2 size-9" /><strong className="block text-strong">{l.fila.producto.nombre}</strong><span className="text-xs text-muted">{l.fila.productoCodigo} · {l.fila.producto.unidadMedida}</span>{l.cantidad > l.fila.cantidad && <p role="alert" className="text-xs text-danger">Disponible: {num(l.fila.cantidad)}</p>}</th>
             <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums">{money(l.fila.producto.precioGlobal)}</td>
-            <td className="w-28 px-3 py-3"><Quantity linea={l} onChange={(n) => onChange(l.fila.productoCodigo, n)} /></td>
+            <td className="w-28 px-3 py-3"><Quantity linea={l} onError={onError} onChange={(n) => onChange(l.fila.productoCodigo, n)} /></td>
             <td className="px-3 py-3 text-right font-bold whitespace-nowrap text-strong tabular-nums">{money(importeLinea(l.fila.producto.precioGlobal, l.cantidad))}</td>
             <td className="pr-2"><IconButton onClick={() => onRemove(l.fila.productoCodigo)} aria-label={`Eliminar ${l.fila.producto.nombre}`}><Trash2 aria-hidden="true" /></IconButton></td>
           </tr>)}</tbody>
@@ -48,13 +53,16 @@ export function CartPanel({ lineas, cliente, invalido, onChange, onRemove, onCle
   </div>;
 }
 
-function Quantity({ linea, onChange }: { linea: LineaCarrito; onChange: (n: number) => void }) {
+function Quantity({ linea, onChange, onError }: { linea: LineaCarrito; onChange: (n: number) => void; onError: (message: string) => void }) {
   const [value, setValue] = useState(String(linea.cantidad));
   const [error, setError] = useState(false);
   useEffect(() => { setValue(String(linea.cantidad)); setError(false); }, [linea.cantidad]);
   function commit() {
     const n = Number(value.replace(',', '.'));
     if (!cantidadValida(linea.fila.producto, n) || n > linea.fila.cantidad) {
+      onError(n > linea.fila.cantidad
+        ? `Stock insuficiente de ${linea.fila.producto.nombre}. Solicitaste ${num(n)} ${linea.fila.producto.unidadMedida}, pero solo hay ${num(linea.fila.cantidad)} disponibles. Se conserva la cantidad anterior (${num(linea.cantidad)}).`
+        : `${linea.fila.producto.nombre}: ingresa ${linea.fila.producto.unidadMedida === 'kg' ? 'un peso positivo con hasta 3 decimales' : 'una cantidad entera mayor que cero'}. Se conserva la cantidad anterior.`);
       setValue(String(linea.cantidad)); setError(true); return;
     }
     setError(false); onChange(n);

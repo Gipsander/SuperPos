@@ -5,7 +5,7 @@ import { Pencil, Plus, SearchX } from 'lucide-react';
 import type { Producto, User } from '@/lib/types';
 import {
   CATEGORIAS, UNIDADES, actualizarProducto, crearProducto, getExistencia, getProducto, getSede, habilitarEnSede,
-  sedesDeUsuario, sedesHabilitadas, setActivo, siguienteCodigo, useStore,
+  habilitarProductosEnSede, sedesDeUsuario, sedesHabilitadas, setActivo, siguienteCodigo, useStore,
 } from '@/lib/store';
 import { coincideCodigoBarras } from '@/lib/pos';
 import { cx, money, norm } from '@/lib/format';
@@ -33,6 +33,7 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
   const [vista, setVista] = useState<Vista>(initialSedeId ? 'sedes' : 'lista');
   const [form, setForm] = useState<{ codigo: string | null } | null>(null);
   const [quitar, setQuitar] = useState<{ sedeId: string; codigo: string } | null>(null);
+  const [quitarTodos, setQuitarTodos] = useState<{ sedeId: string; codigos: string[] } | null>(null);
 
   const list = useMemo(() => state.productos.filter((p) =>
     (!cat || p.categoria === cat) &&
@@ -49,6 +50,18 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
     const result = habilitarEnSede(sedeId, codigo, habilitar);
     if (!result.ok) { toast(result.error, 'error'); return; }
     toast(`${getProducto(state, codigo)?.nombre} ${habilitar ? 'habilitado en' : 'quitado de'} ${getSede(state, sedeId)?.nombre}`);
+  }
+  function aplicarTodos(sedeId: string, codigos: string[], habilitar: boolean) {
+    const result = habilitarProductosEnSede(user, sedeId, codigos, habilitar);
+    if (!result.ok) { toast(result.error, 'error'); return; }
+    toast(`${codigos.length} productos ${habilitar ? 'habilitados en' : 'quitados de'} ${getSede(state, sedeId)?.nombre}`);
+  }
+  function marcarTodos(sedeId: string, habilitar: boolean) {
+    const codigos = list.map((p) => p.codigo);
+    if (!habilitar && codigos.some((codigo) => { const ex = getExistencia(state, sedeId, codigo); return ex?.habilitado && ex.cantidad > 0; })) {
+      setQuitarTodos({ sedeId, codigos }); return;
+    }
+    aplicarTodos(sedeId, codigos, habilitar);
   }
 
   return (
@@ -119,12 +132,25 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
         </TableWrap>
       ) : (
         <>
-          <p className="mb-3.5 text-muted">Marca en qué sedes se vende y se controla cada producto. Cada sede lleva sus existencias de forma independiente.</p>
+          <p className="mb-3.5 text-muted">Marca en qué sedes se vende y se controla cada producto. «Marcar todos» aplica a los {list.length} productos que coinciden con los filtros actuales; cada sede conserva su propio stock.</p>
           <TableWrap caption="Productos habilitados por sede" minWidth={560}>
             <thead>
               <tr>
                 <th scope="col" className={thCls}>Producto</th>
-                {sedes.map((s) => <th key={s.id} scope="col" className={cx(thCls, 'text-center')}>{s.nombre}</th>)}
+                {sedes.map((s) => {
+                  const marcados = list.filter((p) => getExistencia(state, s.id, p.codigo)?.habilitado).length;
+                  return <th key={s.id} scope="col" className={cx(thCls, 'text-center')}>
+                    {s.nombre}
+                    <label className="mt-2 flex min-h-10 cursor-pointer items-center justify-center gap-2 text-sm font-normal normal-case">
+                      <input type="checkbox" className="size-[22px] accent-brand" disabled={!list.length}
+                        checked={list.length > 0 && marcados === list.length}
+                        ref={(el) => { if (el) el.indeterminate = marcados > 0 && marcados < list.length; }}
+                        aria-label={`Marcar todos los productos filtrados en ${s.nombre}`}
+                        onChange={(e) => marcarTodos(s.id, e.target.checked)} />
+                      Marcar todos ({marcados}/{list.length})
+                    </label>
+                  </th>;
+                })}
               </tr>
             </thead>
             <tbody>
@@ -147,6 +173,9 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
       <p role="status" className="mt-2.5 ml-0.5 text-[13px] text-muted">{list.length} productos</p>
 
       {form && <ProductForm codigo={form.codigo} onClose={() => setForm(null)} />}
+      {quitarTodos && <ConfirmModal title="Quitar productos de la sede" danger confirmText="Quitar productos"
+        message={`Se quitarán ${quitarTodos.codigos.length} productos filtrados de ${getSede(state, quitarTodos.sedeId)?.nombre}. Algunos tienen existencias: dejarán de mostrarse en esa sede, pero su stock se conservará para cuando los habilites de nuevo.`}
+        onCancel={() => setQuitarTodos(null)} onConfirm={() => { aplicarTodos(quitarTodos.sedeId, quitarTodos.codigos, false); setQuitarTodos(null); }} />}
       {quitar && (
         <ConfirmModal title="Quitar de la sede" danger confirmText="Quitar" onCancel={() => setQuitar(null)}
           onConfirm={() => { aplicarSede(quitar.sedeId, quitar.codigo, false); setQuitar(null); }}
@@ -167,6 +196,8 @@ function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () =
   });
   const codigoMostrado = editando ? editando.codigo : f.categoria ? siguienteCodigo(state.productos, f.categoria) : 'Selecciona categoría...';
   const [sedesNuevo, setSedesNuevo] = useState<string[]>([]);
+  const sedesActivas = state.sedes.filter((s) => s.activa);
+  const sedesMarcadas = sedesActivas.filter((s) => sedesNuevo.includes(s.id)).length;
   const [error, setError] = useState('');
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => { setF((s) => ({ ...s, [k]: v })); setError(''); };
 
@@ -223,6 +254,13 @@ function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () =
           : (
             <fieldset className="rounded-[10px] border border-line px-3.5 py-3">
               <legend className="px-1 font-semibold text-strong">Habilitar en sedes</legend>
+              <label className="mb-2 flex min-h-9 cursor-pointer items-center gap-2.5 border-b border-line pb-2 font-semibold">
+                <input type="checkbox" className="size-[18px] accent-brand" disabled={!sedesActivas.length}
+                  checked={sedesActivas.length > 0 && sedesMarcadas === sedesActivas.length}
+                  ref={(el) => { if (el) el.indeterminate = sedesMarcadas > 0 && sedesMarcadas < sedesActivas.length; }}
+                  onChange={(e) => setSedesNuevo(e.target.checked ? sedesActivas.map((s) => s.id) : [])} />
+                Marcar todas las sedes
+              </label>
               {state.sedes.filter((s) => s.activa).map((s) => (
                 <label key={s.id} className="flex min-h-9 cursor-pointer items-center gap-2.5">
                   <input type="checkbox" className="size-[18px] accent-brand" checked={sedesNuevo.includes(s.id)}

@@ -27,6 +27,78 @@ const branch = { codigo: 'OESTE', nombre: 'Sede Oeste', estado: 'Lara', ciudad: 
 const account = (sedeId, role = 'cajero') => ({ username: 'ana.demo', name: 'Ana Demo', role, sedeId, activo: true, password: 'demo123' });
 beforeEach(() => { saved = new Map(); store.resetDemo(); auth.logout(); });
 
+test('elimina una sede creada por error y persiste la limpieza sin tocar otras sedes', () => {
+  const { id } = store.guardarSede(admin(), branch);
+  store.habilitarEnSede(id, 'L-002', true);
+  const before = structuredClone(store.getState());
+  assert.equal(store.eliminarSede(admin(), id).ok, true);
+  assert.equal(store.getSede(store.getState(), id), undefined);
+  assert.deepEqual(store.getState().existencias, before.existencias.filter((e) => e.sedeId !== id));
+  assert.deepEqual(store.getState().ventas, before.ventas);
+  assert.deepEqual(store.getState().movimientos, before.movimientos);
+  delete require.cache[storePath];
+  assert.equal(require(storePath).getSede(require(storePath).getState(), id), undefined);
+});
+
+test('eliminar sedes protege permisos, usuarios, existencias, historial y última sede activa', () => {
+  const { id } = store.guardarSede(admin(), branch);
+  const cashier = auth.login('luis', 'admin');
+  let before = JSON.stringify(store.getState());
+  assert.equal(store.eliminarSede(cashier, id).ok, false);
+  assert.equal(store.eliminarSede({ ...cashier, role: 'admin' }, id).ok, false);
+  assert.equal(store.eliminarSede(admin(), 'no-existe').ok, false);
+  assert.equal(JSON.stringify(store.getState()), before);
+  store.guardarUsuario(admin(), { ...account(id), activo: false });
+  before = JSON.stringify(store.getState());
+  assert.match(store.eliminarSede(admin(), id).error, /usuarios/);
+  assert.equal(JSON.stringify(store.getState()), before);
+  store.eliminarUsuario(admin(), 'ana.demo');
+  store.habilitarEnSede(id, 'L-002', true);
+  store.registrarEntrada(id, 'L-002', 2, 'Prueba');
+  store.registrarVenta(id, [{ codigo: 'L-002', cantidad: 2 }], 'tarjeta', 'Luis', undefined, 'V-91000001');
+  before = JSON.stringify(store.getState());
+  assert.equal(store.getExistencia(store.getState(), id, 'L-002').cantidad, 0);
+  assert.match(store.eliminarSede(admin(), id).error, /historial/);
+  assert.equal(JSON.stringify(store.getState()), before);
+  const snapshot = structuredClone(store.getState());
+  snapshot.movimientos = snapshot.movimientos.filter((m) => m.sedeId !== id);
+  snapshot.ventas = snapshot.ventas.filter((v) => v.sedeId !== id);
+  snapshot.existencias.find((e) => e.sedeId === id).cantidad = 1;
+  assert.match(store.motivoBloqueoEliminarSede(snapshot, id), /existencias/);
+  snapshot.existencias.find((e) => e.sedeId === id).cantidad = 0;
+  snapshot.sedes.forEach((s) => { s.activa = s.id === id; });
+  assert.match(store.motivoBloqueoEliminarSede(snapshot, id), /al menos una sede activa/);
+});
+
+test('selección masiva cambia solo productos elegidos, conserva stock y rechaza errores sin cambios parciales', () => {
+  const { id } = store.guardarSede(admin(), branch);
+  const codes = ['L-002', 'L-003'];
+  assert.equal(store.habilitarProductosEnSede(admin(), id, codes, true).ok, true);
+  store.registrarEntrada(id, 'L-002', 3, 'Prueba');
+  const before = structuredClone(store.getState());
+  assert.equal(store.habilitarProductosEnSede(admin(), id, codes, false).ok, true);
+  assert.ok(codes.every((code) => !store.getExistencia(store.getState(), id, code).habilitado));
+  assert.equal(store.getExistencia(store.getState(), id, 'L-002').cantidad, 3);
+  assert.deepEqual(store.getState().existencias.filter((e) => e.sedeId !== id || !codes.includes(e.productoCodigo)), before.existencias.filter((e) => e.sedeId !== id || !codes.includes(e.productoCodigo)));
+  const serialized = JSON.stringify(store.getState());
+  assert.equal(store.habilitarProductosEnSede(admin(), id, ['L-002', 'no-existe'], true).ok, false);
+  assert.equal(store.habilitarProductosEnSede(auth.login('luis', 'admin'), id, codes, true).ok, false);
+  assert.equal(store.habilitarProductosEnSede(admin(), 'no-existe', codes, true).ok, false);
+  assert.equal(JSON.stringify(store.getState()), serialized);
+  assert.equal(store.habilitarProductosEnSede(admin(), id, codes, true).ok, true);
+  assert.equal(store.getExistencia(store.getState(), id, 'L-002').cantidad, 3);
+});
+
+test('venta requiere cliente y rechaza exceso acumulado de stock sin descuentos parciales', () => {
+  const before = JSON.stringify(store.getState());
+  const disponible = store.getExistencia(store.getState(), 's1', 'L-002').cantidad;
+  const missing = store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }], 'tarjeta', 'Luis');
+  assert.equal(missing.ok, false);
+  assert.match(missing.error, /cliente/);
+  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: disponible }, { codigo: 'L-002', cantidad: 1 }], 'tarjeta', 'Luis', undefined, 'V-91000001').ok, false);
+  assert.equal(JSON.stringify(store.getState()), before);
+});
+
 test('búsqueda por terminación admite cualquier longitud y conserva ceros iniciales', () => {
   for (const query of ['*2', '*02', '*002', '*0002', '*00002', '*900002', '*75900002', '  *02  ']) {
     assert.equal(esBusquedaPorTerminacion(query), true, query);
@@ -69,7 +141,7 @@ test('sede nueva → usuario → mercancía → venta en su única sede', () => 
   const otherStock = store.getExistencia(store.getState(), 's1', 'L-001').cantidad;
   assert.equal(store.habilitarEnSede(id, 'L-001', true).ok, true);
   assert.equal(store.registrarEntrada(id, 'L-001', 10, 'Carga de prueba').ok, true);
-  assert.equal(store.registrarVenta(id, [{ codigo: 'L-001', cantidad: 2 }], 'efectivo', user.name, 10).ok, true);
+  assert.equal(store.registrarVenta(id, [{ codigo: 'L-001', cantidad: 2 }], 'efectivo', user.name, 10, 'V-91000001').ok, true);
   assert.equal(store.getExistencia(store.getState(), id, 'L-001').cantidad, 8);
   assert.equal(store.getExistencia(store.getState(), 's1', 'L-001').cantidad, otherStock);
   assert.equal(store.getState().ventas.at(-1).sedeId, id);
@@ -115,7 +187,7 @@ test('sede inactiva bloquea operación y login, conserva historia y permite reac
   assert.equal(auth.login('gipsander', 'admin'), null);
   assert.equal(auth.login('rafael', 'admin').role, 'admin');
   assert.equal(store.registrarEntrada('s1', 'L-001', 5, 'prueba').ok, false);
-  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-001', cantidad: 1 }], 'tarjeta', 'Luis').ok, false);
+  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-001', cantidad: 1 }], 'tarjeta', 'Luis', undefined, 'V-91000001').ok, false);
   assert.equal(store.guardarUsuario(admin(), account('s1')).ok, false);
   assert.deepEqual(store.getState().ventas, before.ventas);
   assert.deepEqual(store.getState().existencias, before.existencias);
@@ -280,12 +352,12 @@ test('venta por peso: cliente en recibo, redondeo monetario y descuento exacto',
 test('venta inválida no descuenta stock ni guarda datos parciales', () => {
   const before = JSON.stringify(store.getState());
   for (const quantity of [0, -1, NaN, Infinity, 0.1234, 999999]) {
-    assert.equal(store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: quantity }], 'tarjeta', 'Luis').ok, false);
+    assert.equal(store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: quantity }], 'tarjeta', 'Luis', undefined, 'V-91000001').ok, false);
   }
-  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-003', cantidad: 0.5 }], 'tarjeta', 'Luis').ok, false);
-  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }], 'efectivo', 'Luis', NaN).ok, false);
+  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-003', cantidad: 0.5 }], 'tarjeta', 'Luis', undefined, 'V-91000001').ok, false);
+  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }], 'efectivo', 'Luis', NaN, 'V-91000001').ok, false);
   assert.equal(store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }], 'tarjeta', 'Luis', undefined, 'V-87654321').ok, false);
-  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }, { codigo: 'L-001', cantidad: 1 }], 'tarjeta', 'Luis').ok, false);
+  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }, { codigo: 'L-001', cantidad: 1 }], 'tarjeta', 'Luis', undefined, 'V-91000001').ok, false);
   assert.equal(JSON.stringify(store.getState()), before);
 });
 

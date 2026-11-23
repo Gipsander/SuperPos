@@ -1,8 +1,8 @@
 'use client';
 import { useState } from 'react';
-import { ArrowUpRight, Boxes, MapPin, Pencil, Plus, Store, Users } from 'lucide-react';
+import { ArrowUpRight, Boxes, MapPin, Pencil, Plus, Store, Trash2, Users } from 'lucide-react';
 import type { Sede, User } from '@/lib/types';
-import { getStock, guardarSede, useStore, type DatosSede } from '@/lib/store';
+import { eliminarSede, getStock, guardarSede, motivoBloqueoEliminarSede, useStore, type DatosSede } from '@/lib/store';
 import { ROLES } from '@/lib/roles';
 import { Button } from '@/components/ui/button';
 import { ErrorBox, Field, Input, SearchBox, Select, Switch } from '@/components/ui/form';
@@ -19,6 +19,11 @@ export function BranchesPanel({ user, onNavigate }: { user: User; onNavigate: (p
   const [status, setStatus] = useState('');
   const [selected, setSelected] = useState('');
   const [editing, setEditing] = useState<Sede | 'new' | null>(null);
+  const [deleting, setDeleting] = useState<Sede | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const toast = useToast();
+  const deleteReason = deleting ? motivoBloqueoEliminarSede(state, deleting.id) : null;
+  function pedirEliminar(s: Sede) { setDeleteError(''); setDeleting(s); }
   const sede = state.sedes.find((s) => s.id === selected);
   const rows = state.sedes.filter((s) => (!status || s.activa === (status === 'activa')) && `${s.codigo} ${s.nombre} ${s.estado} ${s.ciudad}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   useSubBack(sede ? { label: 'Sedes', onBack: () => setSelected('') } : null);
@@ -26,7 +31,7 @@ export function BranchesPanel({ user, onNavigate }: { user: User; onNavigate: (p
   const stock = sede ? getStock(state, sede.id) : [];
   return <section className="mx-auto w-full max-w-[1180px]">
     {sede ? <>
-      <PageHeading eyebrow={`Sedes · ${sede.codigo}`} title={sede.nombre} description={`${sede.ciudad}, ${sede.estado} · ${sede.direccion}`} actions={<Button onClick={() => setEditing(sede)}><Pencil aria-hidden="true" />Editar sede</Button>} />
+      <PageHeading eyebrow={`Sedes · ${sede.codigo}`} title={sede.nombre} description={`${sede.ciudad}, ${sede.estado} · ${sede.direccion}`} actions={<><Button onClick={() => setEditing(sede)}><Pencil aria-hidden="true" />Editar sede</Button><Button variant="danger" onClick={() => pedirEliminar(sede)}><Trash2 aria-hidden="true" />Eliminar sede</Button></>} />
       <div className="mb-5 flex flex-wrap items-center gap-3"><StatusBadge active={sede.activa} feminine />{!sede.activa && <p className="m-0 text-muted">Operación suspendida. Se conservan el equipo, las existencias y el historial.</p>}</div>
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         <StatCard label="Usuarios asignados" value={team.length} icon={Users} />
@@ -54,10 +59,24 @@ export function BranchesPanel({ user, onNavigate }: { user: User; onNavigate: (p
         <p className="mb-1 text-xs font-bold tracking-wide text-muted">{s.codigo}</p><h2 className="mb-2 break-words text-lg font-bold text-strong">{s.nombre}</h2>
         <p className="mb-1 flex items-start gap-2 text-muted"><MapPin className="mt-0.5 size-4 shrink-0" aria-hidden="true" />{s.ciudad && s.estado ? `${s.ciudad}, ${s.estado}` : 'Ubicación por completar'}</p><p className="mb-4 break-words text-sm text-muted">{s.direccion || 'Edita la sede para completar su dirección.'}</p>
         <p className="mt-auto mb-4 text-sm text-muted">{state.usuarios.filter((u) => u.sedeId === s.id).length} usuarios asignados</p>
-        <div className="flex flex-wrap gap-2"><Button variant="primary" onClick={() => setSelected(s.id)} aria-label={`Ver ${s.nombre}`}>Ver sede<ArrowUpRight aria-hidden="true" /></Button><Button onClick={() => setEditing(s)} aria-label={`Editar ${s.nombre}`}><Pencil aria-hidden="true" />Editar</Button></div>
+        <div className="flex flex-wrap gap-2"><Button variant="primary" onClick={() => setSelected(s.id)} aria-label={`Ver ${s.nombre}`}>Ver sede<ArrowUpRight aria-hidden="true" /></Button><Button onClick={() => setEditing(s)} aria-label={`Editar ${s.nombre}`}><Pencil aria-hidden="true" />Editar</Button><Button variant="danger" onClick={() => pedirEliminar(s)} aria-label={`Eliminar ${s.nombre}`}><Trash2 aria-hidden="true" />Eliminar</Button></div>
       </article>)}</div> : <EmptyState title="No hay sedes con estos filtros" icon={Store}>Prueba otra búsqueda o registra una nueva tienda.</EmptyState>}
     </>}
     {editing && <SedeForm user={user} sede={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} onSaved={(id) => { setSelected(id); setEditing(null); }} />}
+    {deleting && <Modal title={`Eliminar ${deleting.nombre}`} onClose={() => setDeleting(null)}>
+      <p className="mb-4">{deleteReason || 'Esta sede no tiene usuarios, existencias ni historial. Se eliminará junto con su configuración de productos. Esta acción no se puede deshacer.'}</p>
+      <ErrorBox message={deleteError} />
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button onClick={() => setDeleting(null)}>Cancelar</Button>
+        {deleteReason ? <Button onClick={() => { setEditing(deleting); setDeleting(null); }}>Editar sede</Button> : <Button variant="danger" onClick={() => {
+          const result = eliminarSede(user, deleting.id);
+          if (!result.ok) { setDeleteError(result.error); return; }
+          if (selected === deleting.id) setSelected('');
+          setDeleting(null);
+          toast('Sede eliminada');
+        }}>Eliminar sede</Button>}
+      </div>
+    </Modal>}
   </section>;
 }
 

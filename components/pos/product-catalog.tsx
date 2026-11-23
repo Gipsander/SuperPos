@@ -38,7 +38,7 @@ export function ProductCatalog({ rows, enCarrito, onAdd }: {
             <span className="text-xs text-muted">{r.productoCodigo}{r.producto.codigoBarras ? ` · Barras: ${r.producto.codigoBarras}` : ''} · Disponible: {num(disponible)} {r.producto.unidadMedida}</span>
           </div>
           <strong className="text-strong">{money(r.producto.precioGlobal)}<span className="text-xs font-normal"> / {r.producto.unidadMedida}</span></strong>
-          <Button small disabled={disponible <= 0} onClick={() => onAdd(r)} aria-label={`Agregar ${r.producto.nombre}`}><Plus aria-hidden="true" />{disponible <= 0 ? 'Sin stock' : r.producto.unidadMedida === 'kg' ? 'Ingresar peso' : 'Agregar'}</Button>
+          <Button small disabled={disponible <= 0} onClick={() => onAdd(r)} aria-label={`Seleccionar ${r.producto.nombre}`}><Plus aria-hidden="true" />{disponible <= 0 ? 'Sin stock' : r.producto.unidadMedida === 'kg' ? 'Ingresar peso' : 'Elegir cantidad'}</Button>
         </li>;
       })}</ul>}
   </div>;

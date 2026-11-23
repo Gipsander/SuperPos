@@ -2,6 +2,10 @@
 
 Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS 4. Sin base de datos: el estado compartido vive en `lib/store.ts` y se guarda en `localStorage`.
 
+## Guía de usuario
+
+Consulta [GUIA-DE-USUARIO.md](GUIA-DE-USUARIO.md) para aprender a entrar al programa, preparar una tienda, administrar productos y existencias, atender ventas y consultar reportes. Incluye instrucciones por perfil, un glosario, diagramas, un ejemplo de primera venta y soluciones a problemas frecuentes. La instalación y la publicación están en un anexo para el responsable técnico. En VS Code, abre el archivo y pulsa `Ctrl+Shift+V` para ver la vista previa.
+
 ## Acceso de demostración
 
 | Usuario | Contraseña | Perfil |
@@ -120,10 +124,10 @@ La exportación estática (`out/`) se puede publicar en GitHub Pages con una acc
 - Documento: selector V- predeterminado, E- para extranjero y J-/G- para RIF. Pulsa Consultar o Enter. Admite números cortos o largos sin exigir una longitud fija; conserva precisión y los ceros iniciales del RIF. Si existe, muestra el nombre; si no, abre el registro con documento editable, nombres y apellidos (razón social para J/G), teléfono, dirección y teléfono opcional de un conocido. La validación es de formato, no verifica identidad ni validez fiscal ante un organismo. Los clientes antiguos siguen disponibles aunque no tengan los nuevos campos.
 - El cliente se guarda en el mismo almacenamiento local del prototipo y queda disponible para las cajas de ese navegador. No se duplican cédulas. Cambiar la cédula invalida la selección anterior.
 - El cobro requiere cliente identificado. F8 abre el cobro; el recibo guarda una copia del cliente asociado. Nueva venta limpia la selección, conservando el registro del cliente.
-- Administración → Catálogo permite registrar o editar un código de barras opcional, único, de 8 a 14 dígitos. No se inventan códigos comerciales para los productos de demostración: se pueden usar sus códigos internos, por ejemplo L-004.
+- Administración → Productos permite registrar o editar un código de barras opcional, único, de exactamente 8 dígitos en el formulario actual. Los productos de demostración incluyen códigos de prueba; también se pueden usar sus códigos internos, por ejemplo L-004.
 - Productos con unidad kg utilizan el mismo flujo, con el campo Peso (kg) vacío para ingresar el peso manual de balanza (hasta 3 decimales). Inventario admite ingresos fraccionarios para kg. Las demás unidades siguen siendo enteras. No hay integración automática con balanzas ni decodificación de etiquetas de peso variable.
 - Cancelar venta o cambiar sede con una venta en curso requiere confirmar antes de descartar. Cobro, inventario y recibo utilizan el mismo redondeo por línea a centavos.
-- Se migran datos anteriores agregando clientes vacíos; se conservan inventario, cuentas y ventas históricas. El prototipo sigue usando localStorage, sin sincronización entre equipos ni backend de producción.
+- Se migran datos anteriores conservando inventario, cuentas, clientes y ventas históricas. Los cinco clientes ficticios descritos arriba se incorporan una sola vez. El prototipo sigue usando localStorage, sin sincronización entre equipos ni backend de producción.
 
 ### Referencias de diseño
 

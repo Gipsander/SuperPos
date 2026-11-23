@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, ScanBarcode, Search } from 'lucide-react';
+import { AlertTriangle, Plus, ScanBarcode, Search } from 'lucide-react';
 import type { Cliente, FilaStock, MetodoPago, User, Venta } from '@/lib/types';
 import { getStock, registrarVenta, sedesDeUsuario, useStore } from '@/lib/store';
 import { cantidadValida, importeLinea, redondearCantidad } from '@/lib/pos';
@@ -38,6 +38,7 @@ export function PosTerminal({ user }: { user: User }) {
   const [seleccionado, setSeleccionado] = useState<FilaStock | null>(null);
   const [cantidadEntrada, setCantidadEntrada] = useState('1');
   const cantidadRef = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
   const [cobrando, setCobrando] = useState(false);
   const [venta, setVenta] = useState<Venta | null>(null);
   const [pendiente, setPendiente] = useState<{ sede?: string } | null>(null);
@@ -94,11 +95,15 @@ export function PosTerminal({ user }: { user: User }) {
   }, [rows, codigo, seleccionado, enCarrito]);
 
   useEffect(() => {
-    if (modalAbierto) return;
+    if (modalAbierto || !cliente) return;
     const input = seleccionado ? cantidadRef.current : scanRef.current;
     input?.focus();
     input?.select();
-  }, [modalAbierto, seleccionado]);
+  }, [modalAbierto, seleccionado, cliente]);
+
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [error]);
 
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
@@ -124,7 +129,7 @@ export function PosTerminal({ user }: { user: User }) {
       }
       if (e.key === 'F3') {
         e.preventDefault();
-        setBuscando(true);
+        if (cliente) setBuscando(true);
       }
       if (e.key === 'F8') {
         e.preventDefault();
@@ -137,26 +142,23 @@ export function PosTerminal({ user }: { user: User }) {
     }
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [puedeCobrar, seleccionado, abiertoDropdown]);
+  }, [puedeCobrar, seleccionado, abiertoDropdown, cliente]);
 
   if (!sedeId) {
     return <EmptyState title="Sin sedes asignadas">Pide al administrador que te asigne una sede para vender.</EmptyState>;
   }
 
   function add(r: FilaStock, cantidad: number): string | null {
+    if (!cliente) return 'Selecciona o registra al cliente antes de agregar productos.';
     const actual = byCode.get(r.productoCodigo);
     if (!actual || !cantidadValida(actual.producto, cantidad)) return 'Ingresa una cantidad válida.';
     const nueva = redondearCantidad((enCarrito[r.productoCodigo] ?? 0) + cantidad);
     if (nueva > actual.cantidad) {
-      return `Stock insuficiente de ${actual.producto.nombre}. Puedes agregar ${redondearCantidad(
+      return `Stock insuficiente de ${actual.producto.nombre}. Solicitaste ${num(cantidad)} ${actual.producto.unidadMedida}; ya hay ${num(enCarrito[r.productoCodigo] ?? 0)} en la venta. Puedes agregar ${num(Math.max(0, redondearCantidad(
         actual.cantidad - (enCarrito[r.productoCodigo] ?? 0),
-      )} ${actual.producto.unidadMedida} más.`;
+      )))} ${actual.producto.unidadMedida} más. La cantidad anterior se conserva.`;
     }
-    setCart((c) =>
-      c.some((i) => i.codigo === r.productoCodigo)
-        ? c.map((i) => (i.codigo === r.productoCodigo ? { ...i, cantidad: redondearCantidad(i.cantidad + cantidad) } : i))
-        : [...c, { codigo: r.productoCodigo, cantidad }],
-    );
+    setCart((c) => [{ codigo: r.productoCodigo, cantidad: redondearCantidad((c.find((i) => i.codigo === r.productoCodigo)?.cantidad ?? 0) + cantidad) }, ...c.filter((i) => i.codigo !== r.productoCodigo)]);
     setCodigo('');
     setAbiertoDropdown(false);
     setSeleccionado(null);
@@ -167,14 +169,13 @@ export function PosTerminal({ user }: { user: User }) {
     return null;
   }
 
-  function agregarDirecto(r: FilaStock) {
-    const cantParsed = Number(cantidadEntrada.replace(',', '.'));
-    const cantidad = Number.isFinite(cantParsed) && cantParsed > 0 ? cantParsed : 1;
-    const fallo = add(r, cantidad);
-    if (fallo) {
-      setError(fallo);
-      toast(fallo, 'error');
-    }
+  function seleccionarProducto(r: FilaStock) {
+    if (!cliente) { setError('Selecciona o registra al cliente antes de agregar productos.'); return; }
+    setSeleccionado(r);
+    setCodigo(r.producto.nombre);
+    setAbiertoDropdown(false);
+    setError('');
+    setMensaje('');
   }
 
   function reset() {
@@ -224,7 +225,7 @@ export function PosTerminal({ user }: { user: User }) {
       <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="m-0 text-2xl font-bold text-strong">Punto de venta</h1>
-          <p className="m-0 text-sm text-muted">Escanea los productos, identifica al cliente y cobra.</p>
+          <p className="m-0 text-sm text-muted">Identifica al cliente, elige los productos y sus cantidades, y cobra.</p>
         </div>
         {user.role === 'admin' ? (
           <SedeSelect sedes={sedes} value={sedeId} onChange={cambiarSede} />
@@ -236,13 +237,19 @@ export function PosTerminal({ user }: { user: User }) {
         )}
       </header>
 
-      <CustomerPanel key={revisionCliente} user={user} cliente={cliente} onChange={setCliente} />
+      <CustomerPanel key={revisionCliente} user={user} cliente={cliente} onChange={(next) => {
+        setCliente(next); setError(''); setMensaje('');
+        if (!next) { setSeleccionado(null); setCodigo(''); setCantidadEntrada('1'); setAbiertoDropdown(false); setBuscando(false); }
+      }} />
+
+      {!cliente && <p role="status" className="mb-4 rounded-xl border border-brand bg-brand-soft p-4 font-semibold text-brand-dark">Primero consulta o registra al cliente. Después podrás agregar productos a la venta.</p>}
 
       <div className="mb-4 rounded-xl border border-line bg-white p-4">
         <form
           className="flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
+            if (!cliente) { setError('Selecciona o registra al cliente antes de agregar productos.'); return; }
             if (seleccionado) {
               const cantidad = Number(cantidadEntrada.replace(',', '.'));
               const fallo = add(seleccionado, cantidad);
@@ -259,11 +266,11 @@ export function PosTerminal({ user }: { user: User }) {
             const key = raw.toUpperCase();
             const exacto = rows.find((r) => r.productoCodigo.toUpperCase() === key || r.producto.codigoBarras === key);
             if (exacto) {
-              agregarDirecto(exacto);
+              seleccionarProducto(exacto);
               return;
             }
             if (sugerencias.length === 1) {
-              agregarDirecto(sugerencias[0]);
+              seleccionarProducto(sugerencias[0]);
               return;
             }
             if (sugerencias.length > 1) {
@@ -280,6 +287,7 @@ export function PosTerminal({ user }: { user: User }) {
               {(id) => (
                 <Input
                   ref={scanRef}
+                  disabled={!cliente}
                   id={id}
                   value={codigo}
                   autoComplete="off"
@@ -288,7 +296,7 @@ export function PosTerminal({ user }: { user: User }) {
                   aria-expanded={abiertoDropdown && sugerencias.length > 0}
                   aria-controls="pos-dropdown-sugerencias"
                   onFocus={() => {
-                    if (codigo.trim()) setAbiertoDropdown(true);
+                    if (codigo.trim() && !seleccionado) setAbiertoDropdown(true);
                   }}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -325,7 +333,7 @@ export function PosTerminal({ user }: { user: User }) {
                           <button
                             type="button"
                             disabled={agotado}
-                            onClick={() => agregarDirecto(r)}
+                            onClick={() => seleccionarProducto(r)}
                             className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-brand-soft focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             <div className="flex min-w-0 items-center gap-2.5">
@@ -382,6 +390,7 @@ export function PosTerminal({ user }: { user: User }) {
               {(id) => (
                 <Input
                   ref={cantidadRef}
+                  disabled={!cliente}
                   id={id}
                   value={cantidadEntrada}
                   inputMode="decimal"
@@ -398,22 +407,28 @@ export function PosTerminal({ user }: { user: User }) {
             </Field>
           </div>
 
-          <Button type="submit" variant="primary" disabled={!codigo.trim()}>
+          <Button type="submit" variant="primary" disabled={!cliente || !codigo.trim()}>
             <ScanBarcode aria-hidden="true" />
-            Agregar · Enter
+            {seleccionado ? 'Agregar · Enter' : 'Seleccionar · Enter'}
           </Button>
-          <Button onClick={() => setBuscando(true)}>
+          <Button disabled={!cliente} onClick={() => setBuscando(true)}>
             <Search aria-hidden="true" />
             Catálogo · F3
           </Button>
         </form>
 
-        <div id="entrada-producto" className="mt-2 text-sm" role="status">
+        {seleccionado && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand bg-brand-soft p-4">
+          <div><strong className="block text-lg text-brand-dark">{seleccionado.producto.nombre}</strong><span>Disponible para agregar: {num(Math.max(0, redondearCantidad((byCode.get(seleccionado.productoCodigo)?.cantidad ?? 0) - (enCarrito[seleccionado.productoCodigo] ?? 0))))} {seleccionado.producto.unidadMedida}. Indica {seleccionado.producto.unidadMedida === 'kg' ? 'el peso' : 'la cantidad'} y pulsa Agregar.</span></div>
+          <Button onClick={() => { setSeleccionado(null); setCodigo(''); setCantidadEntrada('1'); setError(''); }}>Cancelar selección</Button>
+        </div>}
+        <div id="entrada-producto" className="mt-3">
           {error ? (
-            <ErrorBox message={error} />
+            <div ref={errorRef} role="alert" aria-atomic="true" className="flex items-start gap-3 rounded-xl border-2 border-danger bg-danger-bg p-4 text-base text-danger">
+              <AlertTriangle className="mt-0.5 size-7 shrink-0" aria-hidden="true" /><div><strong className="block text-lg">Revisa la cantidad o el producto</strong><p className="mt-1 mb-0 font-semibold">{error}</p></div>
+            </div>
           ) : (
             <span className="text-muted">
-              {mensaje || 'Escribe el nombre o los últimos 2 o 4 dígitos del código de barras y haz clic en el producto para agregarlo.'}
+              <span role="status">{mensaje || 'Busca y selecciona un producto; luego indica la cantidad y pulsa Agregar. Lo último agregado aparece primero en la venta.'}</span>
             </span>
           )}
         </div>
@@ -423,13 +438,15 @@ export function PosTerminal({ user }: { user: User }) {
         lineas={lineas}
         cliente={cliente}
         invalido={invalido || !!seleccionado}
+        onError={setError}
         onChange={(cod, cantidad) => {
           const fila = byCode.get(cod);
           if (!fila || !cantidadValida(fila.producto, cantidad) || cantidad > fila.cantidad) {
-            toast('Cantidad inválida o superior al stock disponible.', 'error');
+            setError(`No se pudo cambiar la cantidad de ${fila?.producto.nombre ?? cod}. Disponible: ${num(fila?.cantidad ?? 0)} ${fila?.producto.unidadMedida ?? ''}. La cantidad anterior se conserva.`);
             return;
           }
           setCart((c) => c.map((i) => (i.codigo === cod ? { ...i, cantidad } : i)));
+          setError('');
         }}
         onRemove={(cod) => setCart((c) => c.filter((i) => i.codigo !== cod))}
         onClear={() => setPendiente({})}
@@ -452,7 +469,7 @@ export function PosTerminal({ user }: { user: User }) {
             rows={rows}
             enCarrito={enCarrito}
             onAdd={(r) => {
-              agregarDirecto(r);
+              seleccionarProducto(r);
               setBuscando(false);
             }}
           />
