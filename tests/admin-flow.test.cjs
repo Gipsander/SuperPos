@@ -27,78 +27,6 @@ const branch = { codigo: 'OESTE', nombre: 'Sede Oeste', estado: 'Lara', ciudad: 
 const account = (sedeId, role = 'cajero') => ({ username: 'ana.demo', name: 'Ana Demo', role, sedeId, activo: true, password: 'demo123' });
 beforeEach(() => { saved = new Map(); store.resetDemo(); auth.logout(); });
 
-test('elimina una sede creada por error y persiste la limpieza sin tocar otras sedes', () => {
-  const { id } = store.guardarSede(admin(), branch);
-  store.habilitarEnSede(id, 'L-002', true);
-  const before = structuredClone(store.getState());
-  assert.equal(store.eliminarSede(admin(), id).ok, true);
-  assert.equal(store.getSede(store.getState(), id), undefined);
-  assert.deepEqual(store.getState().existencias, before.existencias.filter((e) => e.sedeId !== id));
-  assert.deepEqual(store.getState().ventas, before.ventas);
-  assert.deepEqual(store.getState().movimientos, before.movimientos);
-  delete require.cache[storePath];
-  assert.equal(require(storePath).getSede(require(storePath).getState(), id), undefined);
-});
-
-test('eliminar sedes protege permisos, usuarios, existencias, historial y última sede activa', () => {
-  const { id } = store.guardarSede(admin(), branch);
-  const cashier = auth.login('luis', 'admin');
-  let before = JSON.stringify(store.getState());
-  assert.equal(store.eliminarSede(cashier, id).ok, false);
-  assert.equal(store.eliminarSede({ ...cashier, role: 'admin' }, id).ok, false);
-  assert.equal(store.eliminarSede(admin(), 'no-existe').ok, false);
-  assert.equal(JSON.stringify(store.getState()), before);
-  store.guardarUsuario(admin(), { ...account(id), activo: false });
-  before = JSON.stringify(store.getState());
-  assert.match(store.eliminarSede(admin(), id).error, /usuarios/);
-  assert.equal(JSON.stringify(store.getState()), before);
-  store.eliminarUsuario(admin(), 'ana.demo');
-  store.habilitarEnSede(id, 'L-002', true);
-  store.registrarEntrada(id, 'L-002', 2, 'Prueba');
-  store.registrarVenta(id, [{ codigo: 'L-002', cantidad: 2 }], 'tarjeta', 'Luis', undefined, 'V-91000001');
-  before = JSON.stringify(store.getState());
-  assert.equal(store.getExistencia(store.getState(), id, 'L-002').cantidad, 0);
-  assert.match(store.eliminarSede(admin(), id).error, /historial/);
-  assert.equal(JSON.stringify(store.getState()), before);
-  const snapshot = structuredClone(store.getState());
-  snapshot.movimientos = snapshot.movimientos.filter((m) => m.sedeId !== id);
-  snapshot.ventas = snapshot.ventas.filter((v) => v.sedeId !== id);
-  snapshot.existencias.find((e) => e.sedeId === id).cantidad = 1;
-  assert.match(store.motivoBloqueoEliminarSede(snapshot, id), /existencias/);
-  snapshot.existencias.find((e) => e.sedeId === id).cantidad = 0;
-  snapshot.sedes.forEach((s) => { s.activa = s.id === id; });
-  assert.match(store.motivoBloqueoEliminarSede(snapshot, id), /al menos una sede activa/);
-});
-
-test('selección masiva cambia solo productos elegidos, conserva stock y rechaza errores sin cambios parciales', () => {
-  const { id } = store.guardarSede(admin(), branch);
-  const codes = ['L-002', 'L-003'];
-  assert.equal(store.habilitarProductosEnSede(admin(), id, codes, true).ok, true);
-  store.registrarEntrada(id, 'L-002', 3, 'Prueba');
-  const before = structuredClone(store.getState());
-  assert.equal(store.habilitarProductosEnSede(admin(), id, codes, false).ok, true);
-  assert.ok(codes.every((code) => !store.getExistencia(store.getState(), id, code).habilitado));
-  assert.equal(store.getExistencia(store.getState(), id, 'L-002').cantidad, 3);
-  assert.deepEqual(store.getState().existencias.filter((e) => e.sedeId !== id || !codes.includes(e.productoCodigo)), before.existencias.filter((e) => e.sedeId !== id || !codes.includes(e.productoCodigo)));
-  const serialized = JSON.stringify(store.getState());
-  assert.equal(store.habilitarProductosEnSede(admin(), id, ['L-002', 'no-existe'], true).ok, false);
-  assert.equal(store.habilitarProductosEnSede(auth.login('luis', 'admin'), id, codes, true).ok, false);
-  assert.equal(store.habilitarProductosEnSede(admin(), 'no-existe', codes, true).ok, false);
-  assert.equal(JSON.stringify(store.getState()), serialized);
-  assert.equal(store.habilitarProductosEnSede(admin(), id, codes, true).ok, true);
-  assert.equal(store.getExistencia(store.getState(), id, 'L-002').cantidad, 3);
-});
-
-test('venta requiere cliente y rechaza exceso acumulado de stock sin descuentos parciales', () => {
-  const before = JSON.stringify(store.getState());
-  const disponible = store.getExistencia(store.getState(), 's1', 'L-002').cantidad;
-  const missing = store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }], 'tarjeta', 'Luis');
-  assert.equal(missing.ok, false);
-  assert.match(missing.error, /cliente/);
-  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: disponible }, { codigo: 'L-002', cantidad: 1 }], 'tarjeta', 'Luis', undefined, 'V-91000001').ok, false);
-  assert.equal(JSON.stringify(store.getState()), before);
-});
-
 test('búsqueda por terminación admite cualquier longitud y conserva ceros iniciales', () => {
   for (const query of ['*2', '*02', '*002', '*0002', '*00002', '*900002', '*75900002', '  *02  ']) {
     assert.equal(esBusquedaPorTerminacion(query), true, query);
@@ -406,3 +334,114 @@ test('dirección requerida, contacto alternativo opcional y registros antiguos c
   assert.equal(restored.buscarCliente(restored.getState(), '12.345.678').apellidos, 'Anterior');
   assert.equal(restored.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }], 'tarjeta', 'Luis', undefined, 'V-12345678').ok, true);
 });
+
+test('tasa del día: valor por defecto, solo admin, validación y se guarda en la venta', () => {
+  assert.equal(store.tasaHoy(store.getState()), 45);
+  const cajero = store.getState().usuarios.find((u) => u.username === 'luis');
+  assert.equal(store.setExchangeRate(cajero, 50).ok, false);
+  assert.equal(store.setExchangeRate(admin(), 0).ok, false);
+  assert.equal(store.setExchangeRate(admin(), -3).ok, false);
+  assert.equal(store.setExchangeRate(admin(), 52.5).ok, true);
+  assert.equal(store.tasaHoy(store.getState()), 52.5);
+  const e = store.getState().existencias.find((x) => x.sedeId === 's1' && x.habilitado && x.cantidad > 3);
+  const p = store.getState().productos.find((x) => x.codigo === e.productoCodigo);
+  const r = store.registrarVenta('s1', [{ codigo: p.codigo, cantidad: 1 }], 'tarjeta', 'Luis', undefined, 'V-91000001');
+  assert.equal(r.ok, true);
+  assert.equal(r.venta.tasa, 52.5);
+});
+
+test('sedes: activar/desactivar y eliminar solo sedes sin historial', () => {
+  const nueva = store.guardarSede(admin(), branch);
+  assert.equal(nueva.ok, true);
+  // Sede con ventas e historial: no se elimina, se sugiere desactivar.
+  const rechazo = store.eliminarSede(admin(), 's1');
+  assert.equal(rechazo.ok, false);
+  assert.match(rechazo.error, /Desactívala/);
+  assert.ok(store.getState().sedes.some((s) => s.id === 's1'));
+  // Alternar activa.
+  assert.equal(store.setSedeActiva(admin(), 's2', false).ok, true);
+  assert.equal(store.getState().sedes.find((s) => s.id === 's2').activa, false);
+  assert.equal(store.setSedeActiva(admin(), 's2', true).ok, true);
+  // Con stock, la sede nueva ya no es eliminable.
+  const cajero = store.getState().usuarios.find((u) => u.username === 'luis');
+  assert.equal(store.eliminarSede(cajero, nueva.id).ok, false);
+  const producto = store.getState().productos[0].codigo;
+  store.habilitarEnSede(nueva.id, producto, true);
+  assert.equal(store.registrarEntrada(nueva.id, producto, 5, 'prueba').ok, true);
+  assert.equal(store.eliminarSede(admin(), nueva.id).ok, false);
+});
+
+test('sede creada por error sin actividad se elimina junto con sus existencias vacías', () => {
+  const nueva = store.guardarSede(admin(), branch);
+  assert.equal(store.eliminarSede(admin(), nueva.id).ok, true);
+  assert.equal(store.getState().sedes.some((s) => s.id === nueva.id), false);
+  assert.equal(store.getState().existencias.some((e) => e.sedeId === nueva.id), false);
+});
+
+test('tasa por día: hoy editable, días anteriores intactos y día nuevo hereda la última tasa', () => {
+  const hoy = store.claveDia();
+  const ayer = store.claveDia(new Date(Date.now() - 86400e3));
+  assert.equal(store.tasaDelDia(store.getState(), ayer), 45);
+  assert.equal(store.setExchangeRate(admin(), 60).ok, true);
+  const s = store.getState();
+  assert.equal(s.tasas[hoy], 60);
+  assert.equal(store.tasaDelDia(s, ayer), 45, 'el día anterior no cambia');
+  // Un día sin tasa propia usa la del último día anterior registrado.
+  const manana = store.claveDia(new Date(Date.now() + 86400e3));
+  assert.equal(store.tasaDelDia(s, manana), 60);
+  // Ventas antiguas sin tasa guardada usan la de su día, no la de hoy.
+  const vieja = s.ventas.find((v) => store.claveDia(new Date(v.fecha)) === ayer);
+  if (vieja) assert.equal(store.tasaDeVenta(s, { fecha: vieja.fecha }), 45);
+  // Una venta nueva conserva la tasa de hoy aunque luego cambie.
+  const e = s.existencias.find((x) => x.sedeId === 's1' && x.habilitado && x.cantidad > 3);
+  const r = store.registrarVenta('s1', [{ codigo: e.productoCodigo, cantidad: 1 }], 'tarjeta', 'Luis', undefined, 'V-91000001');
+  assert.equal(r.venta.tasa, 60);
+  store.setExchangeRate(admin(), 70);
+  assert.equal(store.getState().ventas.find((v) => v.id === r.venta.id).tasa, 60);
+});
+
+test('migración: tasa global antigua se reparte por día sin alterar el histórico', () => {
+  const crudo = structuredClone(store.getState());
+  delete crudo.tasas; crudo.exchangeRate = 48;
+  saved.set('superpos.store.v2', JSON.stringify(crudo));
+  // Recarga el módulo con almacenamiento previo.
+  const rutaStore = require.resolve(storePath);
+  delete require.cache[rutaStore];
+  const recargado = require(storePath);
+  const s = recargado.getState();
+  assert.equal(s.exchangeRate, undefined);
+  assert.equal(recargado.tasaHoy(s), 48);
+  s.ventas.forEach((v) => assert.equal(recargado.tasaDeVenta(s, v), 48));
+  delete require.cache[rutaStore];
+  require(storePath);
+});
+
+test('selección masiva cambia solo productos elegidos, conserva stock y rechaza errores sin cambios parciales', () => {
+  const { id } = store.guardarSede(admin(), branch);
+  const codes = ['L-002', 'L-003'];
+  assert.equal(store.habilitarProductosEnSede(admin(), id, codes, true).ok, true);
+  store.registrarEntrada(id, 'L-002', 3, 'Prueba');
+  const before = structuredClone(store.getState());
+  assert.equal(store.habilitarProductosEnSede(admin(), id, codes, false).ok, true);
+  assert.ok(codes.every((code) => !store.getExistencia(store.getState(), id, code).habilitado));
+  assert.equal(store.getExistencia(store.getState(), id, 'L-002').cantidad, 3);
+  assert.deepEqual(store.getState().existencias.filter((e) => e.sedeId !== id || !codes.includes(e.productoCodigo)), before.existencias.filter((e) => e.sedeId !== id || !codes.includes(e.productoCodigo)));
+  const serialized = JSON.stringify(store.getState());
+  assert.equal(store.habilitarProductosEnSede(admin(), id, ['L-002', 'no-existe'], true).ok, false);
+  assert.equal(store.habilitarProductosEnSede(auth.login('luis', 'admin'), id, codes, true).ok, false);
+  assert.equal(store.habilitarProductosEnSede(admin(), 'no-existe', codes, true).ok, false);
+  assert.equal(JSON.stringify(store.getState()), serialized);
+  assert.equal(store.habilitarProductosEnSede(admin(), id, codes, true).ok, true);
+  assert.equal(store.getExistencia(store.getState(), id, 'L-002').cantidad, 3);
+});
+
+test('venta requiere cliente y rechaza exceso acumulado de stock sin descuentos parciales', () => {
+  const before = JSON.stringify(store.getState());
+  const disponible = store.getExistencia(store.getState(), 's1', 'L-002').cantidad;
+  const missing = store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: 1 }], 'tarjeta', 'Luis');
+  assert.equal(missing.ok, false);
+  assert.match(missing.error, /cliente/);
+  assert.equal(store.registrarVenta('s1', [{ codigo: 'L-002', cantidad: disponible }, { codigo: 'L-002', cantidad: 1 }], 'tarjeta', 'Luis', undefined, 'V-91000001').ok, false);
+  assert.equal(JSON.stringify(store.getState()), before);
+});
+

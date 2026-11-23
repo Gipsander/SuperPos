@@ -111,7 +111,7 @@ function AdminShell({ user }: { user: User }) {
           {page === 'productos' && <CatalogPanel key={selectedSede} user={user} initialSedeId={selectedSede} />}
           {page === 'inventario' && <InventoryPanel key={selectedSede} user={user} initialSedeId={selectedSede} />}
           {page === 'precios' && <PricesPanel user={user} />}
-          {page === 'reportes' && <Dashboard />}
+          {page === 'reportes' && <Dashboard user={user} />}
           {current && !current.ready && <ModulePlaceholder module={current} />}
           </SubBackContext.Provider>
         </main>

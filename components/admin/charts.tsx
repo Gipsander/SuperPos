@@ -6,8 +6,8 @@ const W = 440; // ancho lógico de los gráficos verticales (≈ ancho real de s
 const WH = 880; // ancho lógico del gráfico horizontal (ocupa toda la fila)
 
 /** Gráfico de barras SVG (vertical u horizontal) con los colores de la marca. */
-export function BarChart({ data, format, ariaLabel, horizontal = false, className }: {
-  data: Dato[]; format: (n: number) => string; ariaLabel: string; horizontal?: boolean; className?: string;
+export function BarChart({ data, format, ariaLabel, horizontal = false, className, gap = 14 }: {
+  data: Dato[]; format: (n: number) => string; ariaLabel: string; horizontal?: boolean; className?: string; gap?: number;
 }) {
   const max = Math.max(...data.map((d) => d.value), 1);
   if (horizontal) {
@@ -29,7 +29,7 @@ export function BarChart({ data, format, ariaLabel, horizontal = false, classNam
       </svg>
     );
   }
-  const H = 220, top = 24, bottom = 28, left = 8, gap = 14;
+  const H = 220, top = 24, bottom = 28, left = 8;
   const bw = (W - left * 2 - gap * (data.length - 1)) / data.length;
   const ch = H - top - bottom;
   return (

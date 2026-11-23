@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { FilaStock } from '@/lib/types';
 import { coincideCodigoBarras } from '@/lib/pos';
-import { money, norm, num } from '@/lib/format';
+import { norm, num } from '@/lib/format';
+import { Dual } from '@/components/ui/money';
 import { Button } from '@/components/ui/button';
 import { SearchBox } from '@/components/ui/form';
 import { EmptyState } from '@/components/ui/layout';
@@ -37,7 +38,7 @@ export function ProductCatalog({ rows, enCarrito, onAdd }: {
             <strong className="block text-strong">{r.producto.nombre}</strong>
             <span className="text-xs text-muted">{r.productoCodigo}{r.producto.codigoBarras ? ` · Barras: ${r.producto.codigoBarras}` : ''} · Disponible: {num(disponible)} {r.producto.unidadMedida}</span>
           </div>
-          <strong className="text-strong">{money(r.producto.precioGlobal)}<span className="text-xs font-normal"> / {r.producto.unidadMedida}</span></strong>
+          <strong className="text-right text-strong"><Dual usd={r.producto.precioGlobal} /><span className="block text-xs font-normal text-muted">/ {r.producto.unidadMedida}</span></strong>
           <Button small disabled={disponible <= 0} onClick={() => onAdd(r)} aria-label={`Seleccionar ${r.producto.nombre}`}><Plus aria-hidden="true" />{disponible <= 0 ? 'Sin stock' : r.producto.unidadMedida === 'kg' ? 'Ingresar peso' : 'Elegir cantidad'}</Button>
         </li>;
       })}</ul>}

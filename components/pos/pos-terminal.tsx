@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Plus, ScanBarcode, Search } from 'lucide-react';
+import { Plus, ScanBarcode, Search, TriangleAlert, UserRoundSearch, X } from 'lucide-react';
 import type { Cliente, FilaStock, MetodoPago, User, Venta } from '@/lib/types';
 import { getStock, registrarVenta, sedesDeUsuario, useStore } from '@/lib/store';
 import { cantidadValida, importeLinea, redondearCantidad } from '@/lib/pos';
-import { money, norm, num } from '@/lib/format';
+import { norm, num } from '@/lib/format';
 import { EmptyState } from '@/components/ui/layout';
 import { ErrorBox, Field, Input, SedeSelect } from '@/components/ui/form';
-import { Button } from '@/components/ui/button';
+import { Button, IconButton } from '@/components/ui/button';
+import { Kbd } from '@/components/ui/badge';
+import { Dual } from '@/components/ui/money';
 import { ConfirmModal, Modal } from '@/components/ui/modal';
 import { ProductIcon } from '@/components/ui/icons';
 import { useToast } from '@/components/ui/toast';
@@ -19,6 +21,9 @@ import { ProductCatalog } from './product-catalog';
 import { ReceiptModal } from './receipt-modal';
 
 interface Item { codigo: string; cantidad: number }
+interface AlertaStock { codigo: string; nombre: string; unidad: string; stock: number; enVenta: number; restante: number }
+/** Marca que add() ya mostró la alerta grande de stock: los llamadores no repiten el aviso. */
+const ALERTADO = '__stock_alertado__';
 
 export function PosTerminal({ user }: { user: User }) {
   const state = useStore();
@@ -34,11 +39,11 @@ export function PosTerminal({ user }: { user: User }) {
   const [abiertoDropdown, setAbiertoDropdown] = useState(false);
   const [error, setError] = useState('');
   const [mensaje, setMensaje] = useState('');
+  const [alertaStock, setAlertaStock] = useState<AlertaStock | null>(null);
   const [buscando, setBuscando] = useState(false);
   const [seleccionado, setSeleccionado] = useState<FilaStock | null>(null);
   const [cantidadEntrada, setCantidadEntrada] = useState('1');
   const cantidadRef = useRef<HTMLInputElement>(null);
-  const errorRef = useRef<HTMLDivElement>(null);
   const [cobrando, setCobrando] = useState(false);
   const [venta, setVenta] = useState<Venta | null>(null);
   const [pendiente, setPendiente] = useState<{ sede?: string } | null>(null);
@@ -101,9 +106,7 @@ export function PosTerminal({ user }: { user: User }) {
     input?.select();
   }, [modalAbierto, seleccionado, cliente]);
 
-  useEffect(() => {
-    if (error) errorRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [error]);
+
 
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
@@ -118,6 +121,7 @@ export function PosTerminal({ user }: { user: User }) {
   useEffect(() => {
     function key(e: KeyboardEvent) {
       if (document.querySelector('[role="dialog"]') || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (!cliente && (e.key === 'F2' || e.key === 'F3')) return;
       if (e.key === 'F2' || (e.key === 'Escape' && (seleccionado || abiertoDropdown))) {
         e.preventDefault();
         setSeleccionado(null);
@@ -129,7 +133,7 @@ export function PosTerminal({ user }: { user: User }) {
       }
       if (e.key === 'F3') {
         e.preventDefault();
-        if (cliente) setBuscando(true);
+        setBuscando(true);
       }
       if (e.key === 'F8') {
         e.preventDefault();
@@ -149,16 +153,20 @@ export function PosTerminal({ user }: { user: User }) {
   }
 
   function add(r: FilaStock, cantidad: number): string | null {
-    if (!cliente) return 'Selecciona o registra al cliente antes de agregar productos.';
+    if (!cliente) return 'Selecciona un cliente antes de agregar productos.';
     const actual = byCode.get(r.productoCodigo);
-    if (!actual || !cantidadValida(actual.producto, cantidad)) return 'Ingresa una cantidad válida.';
+    if (!actual) return 'Ingresa una cantidad válida.';
+    // Sin existencias en esta sede la venta se bloquea sola, sin depender de apagar el producto a mano.
+    if (actual.cantidad <= 0) { avisarStock(actual); return ALERTADO; }
+    if (!cantidadValida(actual.producto, cantidad)) return 'Ingresa una cantidad válida.';
     const nueva = redondearCantidad((enCarrito[r.productoCodigo] ?? 0) + cantidad);
-    if (nueva > actual.cantidad) {
-      return `Stock insuficiente de ${actual.producto.nombre}. Solicitaste ${num(cantidad)} ${actual.producto.unidadMedida}; ya hay ${num(enCarrito[r.productoCodigo] ?? 0)} en la venta. Puedes agregar ${num(Math.max(0, redondearCantidad(
-        actual.cantidad - (enCarrito[r.productoCodigo] ?? 0),
-      )))} ${actual.producto.unidadMedida} más. La cantidad anterior se conserva.`;
-    }
-    setCart((c) => [{ codigo: r.productoCodigo, cantidad: redondearCantidad((c.find((i) => i.codigo === r.productoCodigo)?.cantidad ?? 0) + cantidad) }, ...c.filter((i) => i.codigo !== r.productoCodigo)]);
+    if (nueva > actual.cantidad) { avisarStock(actual); return ALERTADO; }
+    // El producto agregado o escaneado sube al principio de la lista.
+    setCart((c) => {
+      const previo = c.find((i) => i.codigo === r.productoCodigo);
+      return [{ codigo: r.productoCodigo, cantidad: redondearCantidad((previo?.cantidad ?? 0) + cantidad) }, ...c.filter((i) => i.codigo !== r.productoCodigo)];
+    });
+    setAlertaStock(null);
     setCodigo('');
     setAbiertoDropdown(false);
     setSeleccionado(null);
@@ -169,13 +177,28 @@ export function PosTerminal({ user }: { user: User }) {
     return null;
   }
 
-  function seleccionarProducto(r: FilaStock) {
-    if (!cliente) { setError('Selecciona o registra al cliente antes de agregar productos.'); return; }
-    setSeleccionado(r);
-    setCodigo(r.producto.nombre);
-    setAbiertoDropdown(false);
+  function avisarStock(f: FilaStock) {
+    const enVenta = enCarrito[f.productoCodigo] ?? 0;
+    setAlertaStock({
+      codigo: f.productoCodigo, nombre: f.producto.nombre, unidad: f.producto.unidadMedida,
+      stock: f.cantidad, enVenta, restante: Math.max(0, redondearCantidad(f.cantidad - enVenta)),
+    });
     setError('');
-    setMensaje('');
+  }
+
+  function seleccionarProducto(r: FilaStock) {
+    if (!cliente) { setError('Selecciona un cliente antes de agregar productos.'); return; }
+    setSeleccionado(r); setCodigo(r.producto.nombre); setAbiertoDropdown(false); setError(''); setMensaje('');
+  }
+
+  function agregarDirecto(r: FilaStock, cantidadFija?: number) {
+    const cantParsed = Number(cantidadEntrada.replace(',', '.'));
+    const cantidad = cantidadFija ?? cantParsed;
+    const fallo = add(r, cantidad);
+    if (fallo && fallo !== ALERTADO) {
+      setError(fallo);
+      toast(fallo, 'error');
+    }
   }
 
   function reset() {
@@ -188,6 +211,7 @@ export function PosTerminal({ user }: { user: User }) {
     setCodigo('');
     setError('');
     setMensaje('');
+    setAlertaStock(null);
   }
 
   function cambiarSede(id: string) {
@@ -225,7 +249,7 @@ export function PosTerminal({ user }: { user: User }) {
       <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="m-0 text-2xl font-bold text-strong">Punto de venta</h1>
-          <p className="m-0 text-sm text-muted">Identifica al cliente, elige los productos y sus cantidades, y cobra.</p>
+          <p className="m-0 text-sm text-muted">Identifica al cliente, selecciona productos y cantidades, y cobra.</p>
         </div>
         {user.role === 'admin' ? (
           <SedeSelect sedes={sedes} value={sedeId} onChange={cambiarSede} />
@@ -238,23 +262,72 @@ export function PosTerminal({ user }: { user: User }) {
       </header>
 
       <CustomerPanel key={revisionCliente} user={user} cliente={cliente} onChange={(next) => {
-        setCliente(next); setError(''); setMensaje('');
-        if (!next) { setSeleccionado(null); setCodigo(''); setCantidadEntrada('1'); setAbiertoDropdown(false); setBuscando(false); }
+        setCliente(next); setAlertaStock(null); setError('');
+        if (!next) { setSeleccionado(null); setCodigo(''); setBuscando(false); setAbiertoDropdown(false); setCantidadEntrada('1'); }
       }} />
 
-      {!cliente && <p role="status" className="mb-4 rounded-xl border border-brand bg-brand-soft p-4 font-semibold text-brand-dark">Primero consulta o registra al cliente. Después podrás agregar productos a la venta.</p>}
+      {!cliente && (
+        <div role="alert" className="mb-3 flex items-start gap-3 rounded-xl border-2 border-warn bg-warn-bg px-4 py-3 text-warn">
+          <UserRoundSearch className="mt-0.5 size-6 shrink-0" aria-hidden="true" />
+          <p className="m-0 text-base font-bold">Primero identifica al cliente: consulta su cédula o RIF, regístralo o elígelo del directorio para poder agregar productos.</p>
+        </div>
+      )}
 
-      <div className="mb-4 rounded-xl border border-line bg-white p-4">
+      {alertaStock && (() => {
+        const actual = byCode.get(alertaStock.codigo);
+        const stockActual = actual?.cantidad ?? 0;
+        const enVentaActual = enCarrito[alertaStock.codigo] ?? 0;
+        const a = { ...alertaStock, stock: stockActual, enVenta: enVentaActual, restante: Math.max(0, redondearCantidad(stockActual - enVentaActual)) };
+        const agotado = a.stock <= 0;
+        const u = a.unidad === 'unidad' ? 'unidades' : a.unidad;
+        const fila = byCode.get(a.codigo);
+        return (
+          <div role="alert" className="mb-3 overflow-hidden rounded-2xl border-2 border-danger bg-white shadow-lg">
+            <div className="flex items-center gap-3 bg-danger px-4 py-3 text-white">
+              <TriangleAlert className="size-7 shrink-0" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="m-0 text-lg leading-tight font-extrabold">{agotado ? 'Producto agotado en esta sede' : 'Stock insuficiente'}</p>
+                <p className="m-0 truncate text-sm opacity-90">{a.nombre}</p>
+              </div>
+              <IconButton className="size-9 text-white hover:bg-white/20" onClick={() => setAlertaStock(null)} aria-label="Cerrar alerta de stock"><X aria-hidden="true" /></IconButton>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3">
+              <p className="m-0 min-w-[220px] flex-1 text-base font-semibold text-strong">
+                {agotado
+                  ? <>No quedan existencias de este producto en esta sede.</>
+                  : <>Stock insuficiente: solo quedan <strong className="text-danger">{num(a.stock)} {u}</strong> disponibles en esta sede.</>}
+                {!agotado && a.enVenta > 0 && a.restante === 0 && <span className="block text-sm font-normal text-muted">Ya tienes todo el stock disponible en esta venta.</span>}
+              </p>
+              <dl className="m-0 flex gap-2 text-center">
+                {[['En la sede', a.stock, 'bg-soft text-strong'], ['En la venta', a.enVenta, 'bg-soft text-strong'], ['Puedes agregar', a.restante, a.restante > 0 ? 'bg-ok-bg text-ok' : 'bg-danger-bg text-danger']].map(([t, v, c]) => (
+                  <div key={t as string} className={`min-w-[88px] rounded-xl px-3 py-1.5 ${c}`}>
+                    <dt className="text-[11px] font-semibold opacity-80">{t}</dt>
+                    <dd className="m-0 text-xl leading-tight font-extrabold tabular-nums">{num(v as number)}</dd>
+                  </div>
+                ))}
+              </dl>
+              <div className="flex gap-2">
+                {fila && a.restante > 0 && (
+                  <Button variant="primary" disabled={!cliente} onClick={() => agregarDirecto(fila, a.restante)}>Agregar los {num(a.restante)} disponibles</Button>
+                )}
+                <Button onClick={() => { setAlertaStock(null); scanRef.current?.focus(); }}>Entendido</Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      <fieldset disabled={!cliente} className={`m-0 mb-4 min-w-0 rounded-xl border border-line bg-white p-4 ${cliente ? '' : 'opacity-60'}`}>
+        <legend className="sr-only">Agregar productos a la venta</legend>
         <form
           className="flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!cliente) { setError('Selecciona o registra al cliente antes de agregar productos.'); return; }
             if (seleccionado) {
               const cantidad = Number(cantidadEntrada.replace(',', '.'));
               const fallo = add(seleccionado, cantidad);
               if (fallo) {
-                setError(fallo);
+                if (fallo !== ALERTADO) setError(fallo);
                 cantidadRef.current?.focus();
                 cantidadRef.current?.select();
               }
@@ -287,7 +360,6 @@ export function PosTerminal({ user }: { user: User }) {
               {(id) => (
                 <Input
                   ref={scanRef}
-                  disabled={!cliente}
                   id={id}
                   value={codigo}
                   autoComplete="off"
@@ -368,7 +440,7 @@ export function PosTerminal({ user }: { user: User }) {
                             </div>
                             <div className="flex shrink-0 items-center gap-2.5">
                               <div className="text-right">
-                                <strong className="block text-sm text-strong tabular-nums">{money(r.producto.precioGlobal)}</strong>
+                                <strong className="block text-right text-sm text-strong tabular-nums"><Dual usd={r.producto.precioGlobal} /></strong>
                                 <span className="block text-[11px] text-muted">/ {r.producto.unidadMedida}</span>
                               </div>
                               <span className="inline-flex size-8 items-center justify-center rounded-lg bg-brand text-white">
@@ -390,7 +462,6 @@ export function PosTerminal({ user }: { user: User }) {
               {(id) => (
                 <Input
                   ref={cantidadRef}
-                  disabled={!cliente}
                   id={id}
                   value={cantidadEntrada}
                   inputMode="decimal"
@@ -407,46 +478,56 @@ export function PosTerminal({ user }: { user: User }) {
             </Field>
           </div>
 
-          <Button type="submit" variant="primary" disabled={!cliente || !codigo.trim()}>
+          <Button type="submit" variant="primary" disabled={!codigo.trim()}>
             <ScanBarcode aria-hidden="true" />
-            {seleccionado ? 'Agregar · Enter' : 'Seleccionar · Enter'}
+            {seleccionado ? 'Agregar' : 'Seleccionar'} <Kbd onBrand>Enter</Kbd>
           </Button>
-          <Button disabled={!cliente} onClick={() => setBuscando(true)}>
+          <Button onClick={() => setBuscando(true)}>
             <Search aria-hidden="true" />
-            Catálogo · F3
+            Buscar <Kbd>F3</Kbd>
+          </Button>
+          <Button
+            title="Escribe * y los últimos dígitos del código de barras"
+            onClick={() => { setCodigo('*'); setSeleccionado(null); setError(''); setAbiertoDropdown(false); scanRef.current?.focus(); }}
+          >
+            Código corto <Kbd>*1234</Kbd>
           </Button>
         </form>
 
-        {seleccionado && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand bg-brand-soft p-4">
-          <div><strong className="block text-lg text-brand-dark">{seleccionado.producto.nombre}</strong><span>Disponible para agregar: {num(Math.max(0, redondearCantidad((byCode.get(seleccionado.productoCodigo)?.cantidad ?? 0) - (enCarrito[seleccionado.productoCodigo] ?? 0))))} {seleccionado.producto.unidadMedida}. Indica {seleccionado.producto.unidadMedida === 'kg' ? 'el peso' : 'la cantidad'} y pulsa Agregar.</span></div>
+        {seleccionado && <div className="mt-3 rounded-xl border border-brand bg-brand-soft p-4">
+          <strong className="block text-lg">{seleccionado.producto.nombre}</strong>
+          <p>Indica la cantidad o el peso y pulsa Agregar. Disponible: {num(Math.max(0, redondearCantidad((byCode.get(seleccionado.productoCodigo)?.cantidad ?? 0) - (enCarrito[seleccionado.productoCodigo] ?? 0))))} {seleccionado.producto.unidadMedida}.</p>
           <Button onClick={() => { setSeleccionado(null); setCodigo(''); setCantidadEntrada('1'); setError(''); }}>Cancelar selección</Button>
         </div>}
-        <div id="entrada-producto" className="mt-3">
+        <div id="entrada-producto" className="mt-2 text-sm" role="status">
           {error ? (
-            <div ref={errorRef} role="alert" aria-atomic="true" className="flex items-start gap-3 rounded-xl border-2 border-danger bg-danger-bg p-4 text-base text-danger">
-              <AlertTriangle className="mt-0.5 size-7 shrink-0" aria-hidden="true" /><div><strong className="block text-lg">Revisa la cantidad o el producto</strong><p className="mt-1 mb-0 font-semibold">{error}</p></div>
-            </div>
+            <ErrorBox message={error} />
           ) : (
             <span className="text-muted">
-              <span role="status">{mensaje || 'Busca y selecciona un producto; luego indica la cantidad y pulsa Agregar. Lo último agregado aparece primero en la venta.'}</span>
+              {mensaje || 'Escribe el nombre o los últimos 2 o 4 dígitos del código de barras y selecciona el producto para indicar su cantidad.'}
             </span>
           )}
         </div>
-      </div>
+        <p className="mt-2 mb-0 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+          <span><Kbd>Enter</Kbd> Agregar</span><span><Kbd>F2</Kbd> Ir al buscador</span><span><Kbd>F3</Kbd> Buscar en catálogo</span>
+          <span><Kbd>F8</Kbd> Cobrar</span><span><Kbd>*1234</Kbd> Código corto</span><span>Todo se puede hacer también con el mouse.</span>
+        </p>
+      </fieldset>
 
       <CartPanel
         lineas={lineas}
         cliente={cliente}
         invalido={invalido || !!seleccionado}
-        onError={setError}
         onChange={(cod, cantidad) => {
           const fila = byCode.get(cod);
-          if (!fila || !cantidadValida(fila.producto, cantidad) || cantidad > fila.cantidad) {
-            setError(`No se pudo cambiar la cantidad de ${fila?.producto.nombre ?? cod}. Disponible: ${num(fila?.cantidad ?? 0)} ${fila?.producto.unidadMedida ?? ''}. La cantidad anterior se conserva.`);
-            return;
+          if (!fila || !cantidadValida(fila.producto, cantidad)) {
+            toast('Cantidad inválida.', 'error');
+            return false;
           }
+          if (cantidad > fila.cantidad) { avisarStock(fila); return false; }
+          setAlertaStock(null);
           setCart((c) => c.map((i) => (i.codigo === cod ? { ...i, cantidad } : i)));
-          setError('');
+          return true;
         }}
         onRemove={(cod) => setCart((c) => c.filter((i) => i.codigo !== cod))}
         onClear={() => setPendiente({})}

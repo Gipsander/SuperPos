@@ -13,6 +13,11 @@ import { CLIENTES_DEMO } from './clientes-demo';
 // Regla de alerta: agotado si cantidad = 0; stock bajo si cantidad < stockMinimo.
 
 const KEY = 'superpos.store.v2';
+export const TASA_POR_DEFECTO = 45;
+
+/** Clave de día yyyy-mm-dd en hora local. */
+export const claveDia = (d: Date = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 export const SEDES: Sede[] = [
   { id: 's1', codigo: 'CENTRO', nombre: 'Sede Centro', estado: 'Lara', ciudad: 'Barquisimeto', direccion: 'Av. 20, sector Centro', activa: true },
@@ -127,7 +132,9 @@ function seed(): StoreState {
       }
     }
   }
-  return { clientes: structuredClone(CLIENTES_DEMO), clientesDemoVersion: 1, usuarios: structuredClone(USUARIOS_DEMO), sedes: structuredClone(SEDES), productos, existencias, movimientos, historialPrecios: [], ventas, seq: 2000 };
+  const tasas: Record<string, number> = {};
+  for (let d = 0; d < 7; d++) tasas[claveDia(new Date(base - d * 86400e3))] = TASA_POR_DEFECTO;
+  return { tasas, clientes: structuredClone(CLIENTES_DEMO), clientesDemoVersion: 1, usuarios: structuredClone(USUARIOS_DEMO), sedes: structuredClone(SEDES), productos, existencias, movimientos, historialPrecios: [], ventas, seq: 2000 };
 }
 
 /** Datos guardados con la nomenclatura anterior (P-001…P-024 para todo): recodifica por categoría en todas las referencias. */
@@ -164,6 +171,15 @@ function load(): StoreState {
             direccion: s.direccion ?? base?.direccion ?? '', activa: s.activa ?? true };
         });
         data.clientes ??= [];
+        if (!data.tasas || typeof data.tasas !== 'object') {
+          // Datos con una sola tasa global: cada día con ventas conserva esa tasa y hoy parte de ella.
+          const vieja = Number((data as unknown as { exchangeRate?: number }).exchangeRate);
+          const base = Number.isFinite(vieja) && vieja > 0 ? vieja : TASA_POR_DEFECTO;
+          data.tasas = {};
+          data.ventas.forEach((v) => { data.tasas[claveDia(new Date(v.fecha))] ??= base; });
+          data.tasas[claveDia()] ??= base;
+          delete (data as unknown as { exchangeRate?: number }).exchangeRate;
+        }
         // Una sola incorporación: nunca reemplaza clientes ni restaura ejemplos ya corregidos.
         if (!data.clientesDemoVersion) {
           for (const cliente of CLIENTES_DEMO) {
@@ -284,28 +300,6 @@ export function eliminarUsuario(actor: User, username: string): Result {
   });
 }
 
-/** Solo se borran sedes sin dependencias; las sedes utilizadas se desactivan. */
-export function motivoBloqueoEliminarSede(d: StoreState, sedeId: string): string | null {
-  const sede = d.sedes.find((s) => s.id === sedeId);
-  if (!sede) return 'La sede no existe.';
-  if (sede.activa && !d.sedes.some((s) => s.id !== sedeId && s.activa)) return 'Debe quedar al menos una sede activa.';
-  if (d.usuarios.some((u) => u.sedeId === sedeId)) return 'Reasigna los usuarios de esta sede antes de eliminarla, incluso los inactivos.';
-  if (d.ventas.some((v) => v.sedeId === sedeId) || d.movimientos.some((m) => m.sedeId === sedeId)) return 'Esta sede tiene historial de ventas o inventario. Puedes desactivarla desde Editar sede para conservar esos registros.';
-  if (d.existencias.some((e) => e.sedeId === sedeId && e.cantidad !== 0)) return 'Esta sede tiene existencias. Puedes desactivarla desde Editar sede para conservar el inventario.';
-  return null;
-}
-
-export function eliminarSede(actor: User, sedeId: string): Result {
-  return mutate((d) => {
-    if (!esAdministrador(d, actor)) return fail('Solo el administrador puede eliminar sedes.');
-    const error = motivoBloqueoEliminarSede(d, sedeId);
-    if (error) return fail(error);
-    d.sedes = d.sedes.filter((s) => s.id !== sedeId);
-    d.existencias = d.existencias.filter((e) => e.sedeId !== sedeId);
-    return { ok: true };
-  });
-}
-
 export function guardarSede(actor: User, input: DatosSede, sedeId?: string): Result<{ id: string }> {
   return mutate((d) => {
     if (!esAdministrador(d, actor)) return fail('Solo el administrador puede gestionar sedes.');
@@ -325,6 +319,67 @@ export function guardarSede(actor: User, input: DatosSede, sedeId?: string): Res
       d.productos.forEach((p) => d.existencias.push({ sedeId: id, productoCodigo: p.codigo, cantidad: 0, stockMinimo: 5, habilitado: false }));
     }
     return { ok: true, id };
+  });
+}
+
+/** Una sede solo se puede eliminar si nunca tuvo actividad: sin ventas, movimientos, stock ni usuarios. */
+export function motivoNoEliminable(d: StoreState, sedeId: string): string | null {
+  if (d.ventas.some((v) => v.sedeId === sedeId)) return 'Tiene ventas registradas.';
+  if (d.movimientos.some((m) => m.sedeId === sedeId)) return 'Tiene movimientos de inventario.';
+  if (d.existencias.some((e) => e.sedeId === sedeId && e.cantidad > 0)) return 'Tiene existencias en stock.';
+  if (d.usuarios.some((u) => u.sedeId === sedeId)) return 'Tiene usuarios asignados.';
+  return null;
+}
+
+export function setSedeActiva(actor: User, sedeId: string, activa: boolean): Result {
+  return mutate((d) => {
+    if (!esAdministrador(d, actor)) return fail('Solo el administrador puede gestionar sedes.');
+    const sede = d.sedes.find((s) => s.id === sedeId);
+    if (!sede) return fail('La sede no existe.');
+    if (!activa && !d.sedes.some((s) => s !== sede && s.activa)) return fail('Debe quedar al menos una sede activa.');
+    sede.activa = activa;
+    return { ok: true };
+  });
+}
+
+/** Elimina una sede creada por error. Con historial se rechaza y se sugiere desactivarla. */
+export function eliminarSede(actor: User, sedeId: string): Result {
+  return mutate((d) => {
+    if (!esAdministrador(d, actor)) return fail('Solo el administrador puede gestionar sedes.');
+    const i = d.sedes.findIndex((s) => s.id === sedeId);
+    if (i < 0) return fail('La sede no existe.');
+    const motivo = motivoNoEliminable(d, sedeId);
+    if (motivo) return fail(`No se puede eliminar: ${motivo} Desactívala para conservar el historial y los reportes.`);
+    if (d.sedes[i].activa && !d.sedes.some((s) => s !== d.sedes[i] && s.activa)) return fail('Debe quedar al menos una sede activa.');
+    d.sedes.splice(i, 1);
+    d.existencias = d.existencias.filter((e) => e.sedeId !== sedeId);
+    return { ok: true };
+  });
+}
+
+/**
+ * Tasa vigente de un día: la propia si existe; si no, la del último día anterior registrado
+ * (así un día nuevo arranca con la tasa más reciente), o la siguiente registrada, o la de por defecto.
+ */
+export function tasaDelDia(s: Pick<StoreState, 'tasas'>, clave: string = claveDia()): number {
+  const exacta = s.tasas[clave];
+  if (exacta) return exacta;
+  const claves = Object.keys(s.tasas).sort();
+  const previa = [...claves].reverse().find((k) => k < clave);
+  const siguiente = claves.find((k) => k > clave);
+  return s.tasas[previa ?? siguiente ?? ''] ?? TASA_POR_DEFECTO;
+}
+export const tasaHoy = (s: Pick<StoreState, 'tasas'>) => tasaDelDia(s, claveDia());
+/** Tasa con la que se cobró la venta (o la de su día, en datos antiguos). */
+export const tasaDeVenta = (s: Pick<StoreState, 'tasas'>, v: Pick<Venta, 'tasa' | 'fecha'>) => v.tasa ?? tasaDelDia(s, claveDia(new Date(v.fecha)));
+
+/** Solo se puede fijar la tasa de HOY; la de los días anteriores queda cerrada. */
+export function setExchangeRate(actor: User, tasa: number): Result {
+  return mutate((d) => {
+    if (!esAdministrador(d, actor)) return fail('Solo el administrador puede cambiar la tasa del día.');
+    if (!Number.isFinite(tasa) || tasa <= 0 || tasa > 1e7) return fail('La tasa debe ser un número mayor a 0.');
+    d.tasas[claveDia()] = Math.round(tasa * 100) / 100;
+    return { ok: true };
   });
 }
 
@@ -464,22 +519,6 @@ export function habilitarEnSede(sedeId: string, codigo: string, habilitado: bool
   });
 }
 
-/** Aplica la selección filtrada completa o no cambia ningún producto. Conserva el stock. */
-export function habilitarProductosEnSede(actor: User, sedeId: string, codigos: string[], habilitado: boolean): Result {
-  return mutate((d) => {
-    if (!esAdministrador(d, actor)) return fail('Solo el administrador puede gestionar el catálogo.');
-    if (!d.sedes.some((s) => s.id === sedeId && s.activa)) return fail('La sede está inactiva o no existe.');
-    const seleccion = new Set(codigos);
-    if (!seleccion.size || [...seleccion].some((codigo) => !d.productos.some((p) => p.codigo === codigo))) return fail('Selecciona productos existentes.');
-    for (const codigo of seleccion) {
-      let e = findEx(d, sedeId, codigo);
-      if (!e) { e = { sedeId, productoCodigo: codigo, cantidad: 0, stockMinimo: 5, habilitado: false }; d.existencias.push(e); }
-      e.habilitado = habilitado;
-    }
-    return { ok: true };
-  });
-}
-
 /* ---------- Precio global (F07) ---------- */
 export function setPrecioGlobal(codigo: string, precio: number | string, usuario = 'sistema'): Result<{ anterior: number; nuevo: number }> {
   const nuevo = Math.round(Number(precio) * 100) / 100;
@@ -568,10 +607,27 @@ export function registrarVenta(
       const error = aplicarSalida(d, sedeId, it.codigo, it.cantidad, 'Venta POS / Caja');
       if (error) return fail(error);
     }
-    const venta: Venta = { id: `V-${d.seq++}`, sedeId, fecha: new Date().toISOString(), items, total, metodo, cajero, ...(cliente ? { cliente: { ...cliente } } : {}), ...(metodo === 'efectivo' ? { recibido } : {}) };
+    const venta: Venta = { id: `V-${d.seq++}`, sedeId, fecha: new Date().toISOString(), items, total, metodo, cajero, ...(cliente ? { cliente: { ...cliente } } : {}), ...(metodo === 'efectivo' ? { recibido } : {}), tasa: tasaHoy(d) };
     d.ventas.push(venta);
     return { ok: true, venta };
   });
 }
 
 export function resetDemo(): void { commit(seed()); }
+
+/** Aplica la selección filtrada completa o no cambia ningún producto. Conserva el stock. */
+export function habilitarProductosEnSede(actor: User, sedeId: string, codigos: string[], habilitado: boolean): Result {
+  return mutate((d) => {
+    if (!esAdministrador(d, actor)) return fail('Solo el administrador puede gestionar el catálogo.');
+    if (!d.sedes.some((s) => s.id === sedeId && s.activa)) return fail('La sede está inactiva o no existe.');
+    const seleccion = new Set(codigos);
+    if (!seleccion.size || [...seleccion].some((codigo) => !d.productos.some((p) => p.codigo === codigo))) return fail('Selecciona productos existentes.');
+    for (const codigo of seleccion) {
+      let e = findEx(d, sedeId, codigo);
+      if (!e) { e = { sedeId, productoCodigo: codigo, cantidad: 0, stockMinimo: 5, habilitado: false }; d.existencias.push(e); }
+      e.habilitado = habilitado;
+    }
+    return { ok: true };
+  });
+}
+

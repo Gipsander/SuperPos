@@ -1,6 +1,6 @@
 # SuperPOS — Análisis
 
-*10-10-2026 · Análisis del prototipo interactivo (v0.5 — usuarios y sedes integrados · mejoras de caja)*
+*21-11-2026 · Análisis del prototipo interactivo (v0.7 — bimoneda · control de cliente · modelo de datos)*
 
 | Campo | Valor |
 |--------|--------|
@@ -11,6 +11,8 @@
 | **Datos** | `lib/store.ts` · clave `superpos.store.v2` · tipos en `lib/types.ts` |
 | **Roles** | Administrador · Encargado de inventario · Cajero |
 | **Guía de uso** | [`DOCUMENTACION.md`](DOCUMENTACION.md) · [`README.md`](README.md) |
+| **Modelo de datos** | [`MODELO_DATOS.md`](MODELO_DATOS.md) (ER y diccionario) · [`modelo_datos.sql`](modelo_datos.sql) |
+| **Sugerencias de la evaluación** | [`CLASIFICACION_SUGERENCIAS.md`](CLASIFICACION_SUGERENCIAS.md) |
 
 Este documento es la **referencia de análisis** del prototipo: qué hace cada módulo, qué reglas aplica, qué decisiones se tomaron y qué queda abierto. Cualquier cambio posterior de comportamiento debe alinearse aquí o enmendarlo con una nueva decisión **Dn**.
 
@@ -24,7 +26,7 @@ Este documento es la **referencia de análisis** del prototipo: qué hace cada m
 4. [Caminos alternativos](#4-caminos-alternativos)
 5. [Contexto técnico](#5-contexto-técnico)
 6. [Propuesta de implementación](#6-propuesta-de-implementación)
-7. [Decisiones D1 a D14](#7-decisiones-d1-a-d14)
+7. [Decisiones D1 a D21](#7-decisiones-d1-a-d21)
 8. [Interrogantes que quedan](#8-interrogantes-que-quedan)
 9. [Cierre](#9-cierre)
 
@@ -80,8 +82,8 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 ### Supuestos
 
 - Un solo navegador por persona: los datos no se comparten entre equipos.
-- Cantidades de stock **enteras**.
-- Moneda única (USD) con formato regional `es`.
+- Cantidades de stock **enteras**, salvo los productos en `kg`, que admiten hasta 3 decimales ([D15](#7-decisiones-d1-a-d21)).
+- Precios base en USD con equivalente en Bs. según la tasa de cada día (editable solo la de hoy por el administrador); formato regional `es`.
 
 [↑ Volver al índice](#índice)
 
@@ -112,6 +114,10 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 | Crear / editar productos y habilitar por sede (F04–F06) | ✅ | ❌ | — |
 | Modificar precio global (F07) | ✅ | ❌ | — |
 | Vender en caja | ❌ | — | ✅ su sede |
+| Registrar un cliente nuevo en caja | ✅ | — | ✅ |
+| Editar los datos de un cliente | ✅ | — | ❌ |
+| Cambiar la tasa Bs/$ **de hoy** (D18) | ✅ | ❌ | ❌ |
+| Activar, desactivar o eliminar sedes (D20) | ✅ | ❌ | ❌ |
 | Ver panel y reportes (incluye ranking de cajeros por ingresos) | ✅ | — | — |
 
 **Sedes por usuario (demostración):** `rafael` = todas · `gipsander` = Centro · `luis` = Centro.
@@ -181,11 +187,11 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 | A3 | Precio vacío o negativo | **Rechazo** |
 | A4 | Nuevo precio igual al actual | **Rechazo** (no genera historial) |
 | A5 | Quitar un producto de una sede que tiene stock | **Confirmación**; el stock se conserva por si se vuelve a habilitar |
-| A6 | Ingreso con cantidad no entera, ≤ 0 o > 100 000 | **Rechazo** |
+| A6 | Ingreso con cantidad ≤ 0 o > 100 000, o no entera (en `kg`: con más de 3 decimales) | **Rechazo** |
 | A7 | Ingreso sobre producto inactivo o no habilitado en la sede | **Rechazo** |
 | A8 | Mínimo no entero o negativo | **Rechazo** y el valor vuelve al anterior |
-| A9 | Producto agotado en caja | No se muestra en el catálogo de caja |
-| A10 | Cantidad en carrito mayor al stock | Botón **+** deshabilitado y aviso; el cobro se bloquea |
+| A9 | Producto agotado en caja | Se muestra **al final del catálogo, deshabilitado**; al intentar agregarlo aparece la alerta de stock (D16) |
+| A10 | Cantidad en carrito mayor al stock | Botón **+** deshabilitado y **banner grande** con las cifras y un botón para agregar lo disponible; el cobro se bloquea (D17) |
 | A11 | Efectivo recibido menor al total | **Rechazo** con mensaje |
 | A12 | Carrito vacío | **Cobrar** deshabilitado |
 | A13 | Administrador cambia de sede con el carrito lleno | Se **vacía** el carrito con aviso |
@@ -195,6 +201,11 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 | A17 | Usuario sin sedes asignadas | Estado vacío explicativo |
 | A18 | `localStorage` no disponible | Funciona **solo en memoria** |
 | A19 | Venta con un ítem sin stock suficiente | **Todo o nada**: no se descuenta ningún ítem |
+| A20 | Cajero sin cliente identificado | El escaneo y el agregado de productos quedan **bloqueados** con aviso (D19) |
+| A21 | Eliminar una sede con ventas, movimientos, stock o usuarios | **Rechazo** y se sugiere desactivarla; no se fuerza (D20) |
+| A22 | Sede inactiva | No aparece en Caja ni en Inventario y rechaza ventas, ingresos y cambios de mínimo (D20) |
+| A23 | Cambiar la tasa de un día anterior | **No editable**: solo la de hoy (D18) |
+| A24 | Tasa vacía, 0, negativa o mayor a 10 000 000 | **Rechazo** (D18) |
 
 [↑ Volver al índice](#índice)
 
@@ -220,12 +231,16 @@ SuperPOS es una aplicación web de **punto de venta e inventario** para una cade
 Sede            { id, codigo, nombre, estado, ciudad, direccion, activa }
 Usuario         { username, name, role, label, sedeId, activo }
 CuentaDemo      { ...Usuario, password }
-Producto        { codigo, nombre, categoria, unidadMedida, precioGlobal, activo }
+Producto        { codigo, codigoBarras?, nombre, categoria, unidadMedida, precioGlobal (USD), activo }
 Existencia      { sedeId, productoCodigo, cantidad, stockMinimo, habilitado }
 MovimientoInventario { id, sedeId, productoCodigo, fecha, tipo, cantidad, motivo }
-Venta           { id, sedeId, fecha, items[], total, metodo, cajero, recibido? }
+Venta           { id, sedeId, fecha, items[], total, metodo, cajero, recibido?, cliente?, tasa? }
 CambioPrecio    { id, codigo, nombre, anterior, nuevo, fecha, usuario }
+Cliente         { cedula, nombres, apellidos, telefono, direccion?, telefonoConocido? }
+TasaDia         { fecha (yyyy-mm-dd), tasa }          // StoreState.tasas
 ```
+
+El modelo completo (12 entidades, tipos, claves primarias y foráneas, restricciones e índices) está en [`MODELO_DATOS.md`](MODELO_DATOS.md) y se puede ejecutar con [`modelo_datos.sql`](modelo_datos.sql).
 
 ### Estructura del código
 
@@ -238,7 +253,7 @@ public/       logo.svg
 
 ### API del store
 
-`guardarUsuario` · `guardarSede` · `crearProducto` · `actualizarProducto` · `setActivo` · `habilitarEnSede` · `setPrecioGlobal` · `registrarEntrada` · `setStockMinimo` · `descontarStock` · `registrarVenta`.
+`guardarUsuario` · `eliminarUsuario` · `guardarSede` · `setSedeActiva` · `eliminarSede` · `setExchangeRate` · `registrarCliente` · `actualizarCliente` · `crearProducto` · `actualizarProducto` · `setActivo` · `habilitarEnSede` · `setPrecioGlobal` · `registrarEntrada` · `setStockMinimo` · `descontarStock` · `registrarVenta`.
 
 [↑ Volver al índice](#índice)
 
@@ -267,7 +282,7 @@ UI (React) ──useStore()──► lib/store.ts ──► localStorage
 
 ---
 
-## 7. Decisiones D1 a D14
+## 7. Decisiones D1 a D21
 
 [↑ Volver al índice](#índice)
 
@@ -287,6 +302,13 @@ UI (React) ──useStore()──► lib/store.ts ──► localStorage
 | D12 | El servidor de desarrollo escucha solo en **`127.0.0.1`** | **No** |
 | D13 | Se mantiene la **exportación estática** para poder publicar en GitHub Pages | **No** |
 | D14 | Usuarios y Sedes implementados: crear, editar y activar/desactivar, con persistencia local e integración con catálogo, inventario y caja | **No** |
+| D15 | **Enmienda a D6:** los productos en `kg` admiten hasta **3 decimales**; el resto de unidades sigue entero (`cantidadValida`, `lib/pos.ts`) | **No** |
+| D16 | **Enmienda a A9:** el producto agotado **se muestra** en el catálogo de caja, al final y deshabilitado; el stock 0 bloquea la venta sin depender de apagar el producto | **No** |
+| D17 | **Enmienda a A10:** el stock insuficiente se avisa con un **banner grande** (en la sede, en la venta, puedes agregar) y un botón para agregar lo disponible | **No** |
+| D18 | **Bimoneda:** el precio base sigue en **USD** (D3); el equivalente en Bs. se calcula con una **tasa por día** (45,00 por defecto). Solo el administrador edita la de **hoy**; cada venta guarda la tasa con la que se cobró | **No** |
+| D19 | **Cliente obligatorio** antes de escanear o agregar productos en caja; directorio «Ver todos los clientes» con buscador por documento o nombre. El documento es V-, E-, J- o G-, normalizado | **No** |
+| D20 | **Sedes:** el administrador las activa o desactiva; las inactivas no operan en Caja ni Inventario. Solo se elimina una sede **sin ventas, movimientos, stock ni usuarios**; con historial se sugiere desactivar | **No** |
+| D21 | **Inventario y reportes:** el ingreso de mercancía se hace en la fila del producto con «Guardar Ingreso» (el historial queda en Movimientos); «+ Nuevo producto» es solo del administrador (§2.2); las gráficas se ven **Por Día** o **Semanal** | **No** |
 
 [↑ Volver al índice](#índice)
 
@@ -334,3 +356,5 @@ UI (React) ──useStore()──► lib/store.ts ──► localStorage
 | 0.3 | 10-10-2026 | Migración a Next.js, React, TypeScript y Tailwind; caja y panel con gráficos |
 | 0.4 | 10-10-2026 | Documentación: guía de uso y este análisis |
 | 0.5 | 10-10-2026 | Usuarios y sedes integrados, sede fija del cajero, agotados al final y seis pruebas automáticas |
+| 0.6 | 21-11-2026 | Bimoneda USD/Bs. con tasa por día, cliente obligatorio antes de operar en caja, directorio de clientes, ingreso directo en inventario, sedes activar/eliminar y reportes Por Día |
+| 0.7 | 21-11-2026 | Decisiones D15 a D21 y casos A20 a A24; enmiendas a D6, A6, A9 y A10; permisos de tasa, clientes y sedes; modelo de datos ER con diccionario ([`MODELO_DATOS.md`](MODELO_DATOS.md), [`modelo_datos.sql`](modelo_datos.sql)) y [clasificación de sugerencias](CLASIFICACION_SUGERENCIAS.md) |

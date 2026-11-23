@@ -5,10 +5,11 @@ import { Pencil, Plus, SearchX } from 'lucide-react';
 import type { Producto, User } from '@/lib/types';
 import {
   CATEGORIAS, UNIDADES, actualizarProducto, crearProducto, getExistencia, getProducto, getSede, habilitarEnSede,
-  habilitarProductosEnSede, sedesDeUsuario, sedesHabilitadas, setActivo, siguienteCodigo, useStore,
+  habilitarProductosEnSede, sedesDeUsuario, sedesHabilitadas, setActivo, siguienteCodigo, tasaHoy, useStore,
 } from '@/lib/store';
 import { coincideCodigoBarras } from '@/lib/pos';
-import { cx, money, norm } from '@/lib/format';
+import { bs, cx, norm } from '@/lib/format';
+import { Dual } from '@/components/ui/money';
 import { Button } from '@/components/ui/button';
 import { Tag } from '@/components/ui/badge';
 import { CategorySelect, ErrorBox, Field, Input, SearchBox, Select, Switch, Toolbar } from '@/components/ui/form';
@@ -33,6 +34,7 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
   const [vista, setVista] = useState<Vista>(initialSedeId ? 'sedes' : 'lista');
   const [form, setForm] = useState<{ codigo: string | null } | null>(null);
   const [quitar, setQuitar] = useState<{ sedeId: string; codigo: string } | null>(null);
+
   const [quitarTodos, setQuitarTodos] = useState<{ sedeId: string; codigos: string[] } | null>(null);
 
   const list = useMemo(() => state.productos.filter((p) =>
@@ -51,6 +53,7 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
     if (!result.ok) { toast(result.error, 'error'); return; }
     toast(`${getProducto(state, codigo)?.nombre} ${habilitar ? 'habilitado en' : 'quitado de'} ${getSede(state, sedeId)?.nombre}`);
   }
+
   function aplicarTodos(sedeId: string, codigos: string[], habilitar: boolean) {
     const result = habilitarProductosEnSede(user, sedeId, codigos, habilitar);
     if (!result.ok) { toast(result.error, 'error'); return; }
@@ -113,7 +116,7 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
               <tr key={p.codigo} className="group hover:bg-[#f8fbfe]">
                 <th scope="row" className={cx(tdCls, 'text-left font-normal')}><strong className="text-strong">{p.nombre}</strong><Sub>{p.codigo}{p.codigoBarras ? ` · Barras: ${p.codigoBarras}` : ''}</Sub></th>
                 <td className={tdCls}>{p.categoria}</td><td className={tdCls}>{p.unidadMedida}</td>
-                <td className={cx(tdCls, numCls)}>{money(p.precioGlobal)}</td>
+                <td className={cx(tdCls, numCls)}><Dual usd={p.precioGlobal} /></td>
                 <td className={tdCls}>{sedesHabilitadas(state, p.codigo).filter((id) => sedes.some((s) => s.id === id)).length} de {sedes.length}</td>
                 <td className={tdCls}>
                   {isAdmin
@@ -132,7 +135,7 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
         </TableWrap>
       ) : (
         <>
-          <p className="mb-3.5 text-muted">Marca en qué sedes se vende y se controla cada producto. «Marcar todos» aplica a los {list.length} productos que coinciden con los filtros actuales; cada sede conserva su propio stock.</p>
+          <p className="mb-3.5 text-muted">Marcar todos aplica solo a los productos que coinciden con los filtros actuales. Marca en qué sedes se vende y se controla cada producto. Cada sede lleva sus existencias de forma independiente.</p>
           <TableWrap caption="Productos habilitados por sede" minWidth={560}>
             <thead>
               <tr>
@@ -186,7 +189,7 @@ export function CatalogPanel({ user, embedded, initialSedeId = '' }: { user: Use
 }
 
 /** F04 registrar / F05 actualizar producto. */
-function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () => void }) {
+export function ProductForm({ codigo, onClose, sedeInicial }: { codigo: string | null; onClose: () => void; sedeInicial?: string }) {
   const state = useStore();
   const toast = useToast();
   const editando: Producto | undefined = codigo ? getProducto(state, codigo) : undefined;
@@ -195,9 +198,11 @@ function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () =
     unidadMedida: editando?.unidadMedida ?? 'unidad', precio: '', activo: editando?.activo ?? true,
   });
   const codigoMostrado = editando ? editando.codigo : f.categoria ? siguienteCodigo(state.productos, f.categoria) : 'Selecciona categoría...';
-  const [sedesNuevo, setSedesNuevo] = useState<string[]>([]);
-  const sedesActivas = state.sedes.filter((s) => s.activa);
-  const sedesMarcadas = sedesActivas.filter((s) => sedesNuevo.includes(s.id)).length;
+  const activas = state.sedes.filter((s) => s.activa);
+  const [sedesSel, setSedesSel] = useState<string[]>(() =>
+    editando ? sedesHabilitadas(state, editando.codigo).filter((id) => activas.some((s) => s.id === id))
+      : sedeInicial && activas.some((s) => s.id === sedeInicial) ? [sedeInicial] : []);
+  const todasMarcadas = activas.length > 0 && activas.every((s) => sedesSel.includes(s.id));
   const [error, setError] = useState('');
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => { setF((s) => ({ ...s, [k]: v })); setError(''); };
 
@@ -206,11 +211,13 @@ function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () =
     if (editando) {
       const r = actualizarProducto(editando.codigo, { codigoBarras: f.codigoBarras, nombre: f.nombre, categoria: f.categoria, unidadMedida: f.unidadMedida, activo: f.activo });
       if (!r.ok) { setError(r.error); return; }
+      const antes = sedesHabilitadas(state, editando.codigo);
+      activas.forEach((s) => { if (antes.includes(s.id) !== sedesSel.includes(s.id)) habilitarEnSede(s.id, editando.codigo, sedesSel.includes(s.id)); });
       toast(`Cambios guardados en ${f.nombre.trim()}`);
     } else {
       const r = crearProducto({ codigoBarras: f.codigoBarras, nombre: f.nombre, categoria: f.categoria, unidadMedida: f.unidadMedida, precioGlobal: f.precio, activo: f.activo });
       if (!r.ok) { setError(r.error); return; }
-      sedesNuevo.forEach((id) => habilitarEnSede(id, r.codigo, true));
+      sedesSel.forEach((id) => habilitarEnSede(id, r.codigo, true));
       toast(`Producto ${r.codigo} registrado`);
     }
     onClose();
@@ -247,30 +254,25 @@ function ProductForm({ codigo, onClose }: { codigo: string | null; onClose: () =
           <Field label="Unidad de medida">
             {(id) => <Select id={id} value={f.unidadMedida} onChange={(e) => set('unidadMedida', e.target.value)}>{UNIDADES.map((u) => <option key={u}>{u}</option>)}</Select>}
           </Field>
-          {!editando && <Field label="Precio global (USD)">{(id) => <Input id={id} type="number" min={0} step={0.01} inputMode="decimal" placeholder="0.00" value={f.precio} onChange={(e) => set('precio', e.target.value)} />}</Field>}
+          {!editando && <Field label="Precio global (USD)" hint={Number(f.precio) > 0 ? `Equivale a ${bs(Number(f.precio), tasaHoy(state))} (tasa ${tasaHoy(state).toLocaleString('es-VE', { minimumFractionDigits: 2 })})` : undefined}>{(id, desc) => <Input id={id} aria-describedby={desc} type="number" min={0} step={0.01} inputMode="decimal" placeholder="0.00" value={f.precio} onChange={(e) => set('precio', e.target.value)} />}</Field>}
         </div>
-        {editando
-          ? <p className="m-0 text-[13px] text-muted">El precio global se modifica desde la sección Precios.</p>
-          : (
-            <fieldset className="rounded-[10px] border border-line px-3.5 py-3">
-              <legend className="px-1 font-semibold text-strong">Habilitar en sedes</legend>
-              <label className="mb-2 flex min-h-9 cursor-pointer items-center gap-2.5 border-b border-line pb-2 font-semibold">
-                <input type="checkbox" className="size-[18px] accent-brand" disabled={!sedesActivas.length}
-                  checked={sedesActivas.length > 0 && sedesMarcadas === sedesActivas.length}
-                  ref={(el) => { if (el) el.indeterminate = sedesMarcadas > 0 && sedesMarcadas < sedesActivas.length; }}
-                  onChange={(e) => setSedesNuevo(e.target.checked ? sedesActivas.map((s) => s.id) : [])} />
-                Marcar todas las sedes
-              </label>
-              {state.sedes.filter((s) => s.activa).map((s) => (
-                <label key={s.id} className="flex min-h-9 cursor-pointer items-center gap-2.5">
-                  <input type="checkbox" className="size-[18px] accent-brand" checked={sedesNuevo.includes(s.id)}
-                    onChange={(e) => setSedesNuevo((l) => e.target.checked ? [...l, s.id] : l.filter((x) => x !== s.id))} />
-                  {s.nombre}
-                </label>
-              ))}
-              <p className="mt-1 mb-0 text-[13px] text-muted">Cada sede lleva su propio stock. Puedes cambiarlo después.</p>
-            </fieldset>
-          )}
+        {editando && <p className="m-0 text-[13px] text-muted">El precio global se modifica desde la sección Precios.</p>}
+        <fieldset className="rounded-[10px] border border-line px-3.5 py-3">
+          <legend className="px-1 font-semibold text-strong">Habilitar en sedes</legend>
+          <label className="flex min-h-9 cursor-pointer items-center gap-2.5 border-b border-line pb-1 font-semibold text-strong">
+            <input type="checkbox" className="size-[18px] accent-brand" checked={todasMarcadas}
+              onChange={(e) => setSedesSel(e.target.checked ? activas.map((s) => s.id) : [])} />
+            Seleccionar / marcar todas las sedes
+          </label>
+          {activas.map((s) => (
+            <label key={s.id} className="flex min-h-9 cursor-pointer items-center gap-2.5">
+              <input type="checkbox" className="size-[18px] accent-brand" checked={sedesSel.includes(s.id)}
+                onChange={(e) => setSedesSel((l) => e.target.checked ? [...l, s.id] : l.filter((x) => x !== s.id))} />
+              {s.nombre}
+            </label>
+          ))}
+          <p className="mt-1 mb-0 text-[13px] text-muted">Cada sede lleva su propio stock. Si un producto llega a 0 en una sede, Caja deja de venderlo ahí automáticamente.</p>
+        </fieldset>
         <label className="flex min-h-9 cursor-pointer items-center gap-2.5">
           <input type="checkbox" className="size-[18px] accent-brand" checked={f.activo} onChange={(e) => set('activo', e.target.checked)} /> Producto activo
         </label>

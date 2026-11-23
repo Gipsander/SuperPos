@@ -1,7 +1,8 @@
 'use client';
 import { useState } from 'react';
 import type { Cliente, MetodoPago } from '@/lib/types';
-import { money } from '@/lib/format';
+import { bs, money } from '@/lib/format';
+import { useTasa } from '@/components/ui/money';
 import { Button } from '@/components/ui/button';
 import { ErrorBox, Field, Input } from '@/components/ui/form';
 import { Modal } from '@/components/ui/modal';
@@ -11,6 +12,7 @@ import { PaymentMethodSelector } from './payment-method-selector';
 export function PaymentModal({ total, cliente, onClose, onConfirm }: {
   total: number; cliente: Cliente; onClose: () => void; onConfirm: (metodo: MetodoPago, recibido?: number) => string | null;
 }) {
+  const tasa = useTasa();
   const [metodo, setMetodo] = useState<MetodoPago>('efectivo');
   const [recibido, setRecibido] = useState('');
   const [error, setError] = useState('');
@@ -20,7 +22,7 @@ export function PaymentModal({ total, cliente, onClose, onConfirm }: {
   function submit(e: React.FormEvent) {
     e.preventDefault();
     if (metodo === 'efectivo' && (recibido === '' || !Number.isFinite(monto) || monto < total)) {
-      setError(`El efectivo recibido debe cubrir ${money(total)}.`);
+      setError(`El efectivo recibido debe cubrir ${money(total)} (${bs(total, tasa)}).`);
       return;
     }
     const fallo = onConfirm(metodo, metodo === 'efectivo' ? monto : undefined);
@@ -32,12 +34,12 @@ export function PaymentModal({ total, cliente, onClose, onConfirm }: {
       <form onSubmit={submit} noValidate className="flex flex-col gap-3.5">
         <div className="flex items-baseline justify-between rounded-xl bg-soft px-4 py-3">
           <span className="text-muted">Total a cobrar</span>
-          <strong className="text-[28px] tracking-tight text-strong tabular-nums">{money(total)}</strong>
+          <span className="text-right"><strong className="block text-[28px] leading-tight tracking-tight text-strong tabular-nums">{money(total)}</strong><strong className="block text-lg text-brand-dark tabular-nums">{bs(total, tasa)}</strong></span>
         </div>
         <p className="m-0 text-sm text-muted">Cliente: <strong>{cliente.nombres} {cliente.apellidos}</strong> · {cliente.cedula}</p>
         <PaymentMethodSelector value={metodo} onChange={(m) => { setMetodo(m); setError(''); }} />
         {metodo === 'efectivo' && (
-          <Field label="Efectivo recibido (USD)" hint={recibido !== '' && monto >= total ? `Cambio a entregar: ${money(cambio)}` : 'Ingresa el monto entregado por el cliente.'}>
+          <Field label="Efectivo recibido (USD)" hint={recibido !== '' && monto >= total ? `Vuelto a entregar: ${money(cambio)} · ${bs(cambio, tasa)}` : 'Ingresa el monto entregado por el cliente.'}>
             {(id, desc) => (
               <div className="flex flex-wrap gap-2">
                 <Input id={id} aria-describedby={desc} type="number" min={0} step={0.01} inputMode="decimal" className="min-w-0 flex-1 basis-[140px]" value={recibido}

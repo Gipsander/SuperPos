@@ -36,3 +36,8 @@ export function Falta({ estado, n }: { estado: EstadoStock; n: number }) {
     </span>
   );
 }
+
+/** Insignia de tecla rápida, p. ej. [F8]. */
+export function Kbd({ children, onBrand }: { children: React.ReactNode; onBrand?: boolean }) {
+  return <kbd className={cx('rounded border px-1.5 py-px font-mono text-[11px] font-bold', onBrand ? 'border-white/50 bg-white/20 text-white' : 'border-edge bg-soft text-muted')}>{children}</kbd>;
+}
